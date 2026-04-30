@@ -1,0 +1,488 @@
+{% extends 'base.html' %}
+{% block title %}Queue — {{ channel.name }}{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>{{ channel.name }} <span class="page-subtitle">Moderation Queue</span></h1>
+  <div class="page-header-actions">
+    <a href="{{ url_for('admin.channel_blacklist', channel_id=channel.id) }}" class="btn btn-ghost">Blacklist</a>
+    {% if channel_role == 'admin' %}
+      <a href="{{ url_for('admin.channel_settings', channel_id=channel.id) }}" class="btn btn-ghost">Languages &amp; Settings</a>
+    {% endif %}
+    <a href="{{ url_for('display.rss_all', channel_id=channel.id) }}" class="btn btn-ghost">RSS</a>
+  </div>
+</div>
+
+<!--
+  Sticky focus bar
+  ────────────────
+  Percentile P (0–100): the message at index round(P/100 × (N−1)) in the
+  newest-first list is centred in the viewport.
+    P=0   → newest (top of list, scroll to top)
+    P=50  → median message centred
+    P=100 → oldest message centred (or as close as scroll range allows)
+  Two moderators at different values naturally cover different age-bands.
+-->
+<div class="queue-focus-bar">
+  <label class="percentile-label">Focus: <strong id="percentile-value-label">Latest</strong></label>
+  <input type="range" id="percentile-slider" min="0" max="100" value="0" step="1"
+         class="percentile-slider">
+</div>
+
+<div class="queue-toolbar">
+  <span id="queue-count" class="queue-count"></span>
+  <div id="lang-chips" class="lang-chips"></div>
+</div>
+
+<div id="queue-msgs">
+  <p class="queue-loading text-muted">Loading…</p>
+</div>
+
+{% if is_superadmin and sim_active %}
+<div id="sim-panel" class="sim-panel">
+  <button id="sim-toggle" class="sim-toggle" aria-expanded="false">
+    Simulation <span id="sim-chevron" class="sim-chevron">▲</span>
+  </button>
+  <div id="sim-body" class="sim-body" hidden>
+    <div class="sim-row">
+      <input type="range"  id="sim-slider" min="1" max="240" value="30" class="sim-slider">
+      <input type="number" id="sim-num"    min="1" max="240" value="30" class="sim-num form-input form-input-sm">
+      <span class="text-muted small">/ min</span>
+    </div>
+    <div class="sim-row">
+      <button id="sim-btn" class="btn btn-primary btn-sm">Start</button>
+      <span id="sim-count" class="text-muted small"></span>
+    </div>
+  </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+const CHANNEL_ID  = {{ channel.id | tojson }};
+const CSRF_TOKEN  = {{ csrf_token | tojson }};
+
+// ── State ──────────────────────────────────────────────────────────────────
+const cardMap     = new Map();   // message id (number) → card DOM element
+let   langFilter  = [];
+let   pendingScroll = false;     // set when content changes; triggers scroll reanchor
+let   selectedId  = null;        // currently keyboard-armed card id
+
+// ── Helpers ────────────────────────────────────────────────────────────────
+function esc(str) {
+  const d = document.createElement('div');
+  d.textContent = str;
+  return d.innerHTML;
+}
+
+async function apiPost(url, body) {
+  await fetch(url, {
+    method:  'POST',
+    headers: { 'X-CSRF-Token': CSRF_TOKEN, 'Content-Type': 'application/x-www-form-urlencoded' },
+    body:    new URLSearchParams(body),
+  });
+  poll();
+}
+
+// ── Card selection + keyboard shortcuts ───────────────────────────────────
+function selectCard(id) {
+  if (selectedId !== null && cardMap.has(selectedId))
+    cardMap.get(selectedId).classList.remove('selected');
+  selectedId = id;
+  if (id !== null && cardMap.has(id))
+    cardMap.get(id).classList.add('selected');
+}
+
+// Keys 1–5 map to button index 0–4 on the selected card
+document.addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+  if (e.key === 'Escape') { selectCard(null); return; }
+  const idx = { '1': 0, '2': 1, '3': 2, '4': 3, '5': 4 }[e.key];
+  if (idx === undefined || selectedId === null) return;
+  const card = cardMap.get(selectedId);
+  if (!card) { selectCard(null); return; }
+  const btns = card.querySelectorAll('.msg-actions .btn');
+  if (btns[idx]) { btns[idx].click(); selectCard(null); }
+});
+
+// Click on card background → select it; click on button → action only
+document.getElementById('queue-msgs').addEventListener('click', e => {
+  const card = e.target.closest('.msg-card');
+  if (!card) { selectCard(null); return; }
+  if (e.target.closest('.btn')) return;   // button click handled separately
+  const id = parseInt(card.dataset.id);
+  selectCard(selectedId === id ? null : id);   // toggle
+});
+
+// ── Card rendering ─────────────────────────────────────────────────────────
+function makeCard(msg) {
+  const card = document.createElement('div');
+  card.className        = 'msg-card msg-entering';
+  card.id               = 'msg-' + msg.id;
+  card.dataset.id       = msg.id;
+  card.dataset.arrivedAt = msg.arrived_at;
+
+  // Avatar — only allow http/https image URLs to prevent javascript: injection
+  const av = document.createElement('div');
+  av.className = 'msg-avatar';
+  if (msg.profile_img && /^https?:\/\//i.test(msg.profile_img)) {
+    const img = document.createElement('img');
+    img.src = msg.profile_img; img.alt = ''; img.className = 'avatar-img';
+    av.appendChild(img);
+  } else {
+    const ini = document.createElement('div');
+    ini.className   = 'avatar-initial';
+    ini.textContent = (msg.screen_name[0] || '?').toUpperCase();
+    av.appendChild(ini);
+  }
+  card.appendChild(av);
+
+  // Body (flex column: meta row, message text, action buttons)
+  const body = document.createElement('div');
+  body.className = 'msg-body';
+
+  // Meta row
+  const meta = document.createElement('div');
+  meta.className = 'msg-meta';
+
+  const nm = document.createElement('span');
+  nm.className = 'msg-name';
+  nm.textContent = msg.screen_name;   // textContent — safe from XSS
+  meta.appendChild(nm);
+
+  if (msg.message_type === 'emoji') {
+    const b = document.createElement('span');
+    b.className = 'badge badge-emoji'; b.textContent = 'emoji';
+    meta.appendChild(b);
+  } else if (msg.message_type === 'qa') {
+    const b = document.createElement('span');
+    b.className = 'badge badge-qa'; b.textContent = 'Q&A';
+    meta.appendChild(b);
+  }
+
+  if (msg.detected_language) {
+    const b = document.createElement('span');
+    b.className = 'badge badge-lang';
+    b.textContent = msg.detected_language;  // language code — safe
+    meta.appendChild(b);
+  }
+
+  const tm = document.createElement('span');
+  tm.className   = 'msg-time';
+  tm.textContent = new Date(msg.arrived_at).toLocaleTimeString(
+    [], { hour: '2-digit', minute: '2-digit', second: '2-digit' }
+  );
+  meta.appendChild(tm);
+  body.appendChild(meta);
+
+  // Message text — dir="auto" lets the browser detect RTL (Arabic, Hebrew, etc.)
+  // textContent prevents any HTML injection from message content.
+  const txt = document.createElement('div');
+  txt.className = 'msg-text';
+  txt.dir       = 'auto';
+  txt.textContent = msg.message;   // textContent — safe from XSS
+  body.appendChild(txt);
+
+  // Actions — always below the text (own row, never overlaps)
+  const actions = document.createElement('div');
+  actions.className = 'msg-actions';
+
+  // Key hint span helper
+  const hint = (key) => {
+    const s = document.createElement('span');
+    s.className   = 'key-hint';
+    s.textContent = key + ' ';
+    return s;
+  };
+
+  const actionDefs = [
+    { cls: 'btn-highlight',    title: 'Highlight — approve and mark as highlight (key 1)', label: '💡',       key: '1', ep: 'highlight'       },
+    { cls: 'btn-accept',       title: 'Accept (key 2)',                                     label: 'Accept',   key: '2', ep: 'approve'         },
+    { cls: 'btn-reject-ghost', title: 'Reject (key 3)',                                     label: 'Reject',   key: '3', ep: 'reject'          },
+    { cls: 'btn-reject-plus',  title: 'Reject this and all similar in queue (key 4)',       label: 'Reject++', key: '4', ep: 'reject-similar'  },
+  ];
+  actionDefs.forEach(({ cls, title, label, key, ep }) => {
+    const btn = document.createElement('button');
+    btn.className = 'btn ' + cls;
+    btn.title     = title;
+    btn.appendChild(hint(key));
+    btn.appendChild(document.createTextNode(label));
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      apiPost(`/api/channel/${CHANNEL_ID}/message/${msg.id}/${ep}`, {});
+    });
+    actions.appendChild(btn);
+  });
+
+  const ban = document.createElement('button');
+  ban.className = 'btn btn-ban';
+  ban.title     = 'Ban user from this channel — rejects all their queued messages (key 5)';
+  ban.appendChild(hint('5'));
+  ban.appendChild(document.createTextNode('Ban'));
+  const banBody = { screen_name: msg.screen_name };
+  if (msg.sender_id)      banBody.sender_id      = msg.sender_id;
+  if (msg.centralauth_id) banBody.centralauth_id = String(msg.centralauth_id);
+  ban.addEventListener('click', e => {
+    e.stopPropagation();
+    apiPost(`/api/channel/${CHANNEL_ID}/block-user`, banBody);
+  });
+  actions.appendChild(ban);
+
+  body.appendChild(actions);
+  card.appendChild(body);
+  return card;
+}
+
+// ── Queue diff + render ────────────────────────────────────────────────────
+function updateQueue(messages, langCodes) {
+  const container = document.getElementById('queue-msgs');
+  const newIds    = new Set(messages.map(m => m.id));
+  let   changed   = false;
+
+  // 1. Remove cards no longer in queue (slide out)
+  for (const [id, card] of cardMap) {
+    if (!newIds.has(id)) {
+      if (selectedId === id) selectCard(null);
+      card.classList.add('msg-leaving');
+      const c = card;
+      setTimeout(() => c.remove(), 280);
+      cardMap.delete(id);
+      changed = true;
+    }
+  }
+
+  // 2. Insert new cards at the top, maintaining newest-first order.
+  //    Sort new messages oldest-first so that after successive prepends
+  //    the newest ends up at the very top.
+  const incoming = messages
+    .filter(m => !cardMap.has(m.id))
+    .sort((a, b) => (a.arrived_at < b.arrived_at ? -1 : 1));
+
+  for (const msg of incoming) {
+    const card = makeCard(msg);
+    container.prepend(card);
+    cardMap.set(msg.id, card);
+    // Two rAFs: first ensures the entering class is rendered, second removes
+    // it so the CSS transition plays from the initial to the settled state.
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() => card.classList.remove('msg-entering'))
+    );
+    changed = true;
+  }
+
+  // 3. Remove loading placeholder once we have real data
+  const placeholder = container.querySelector('.queue-loading');
+  if (placeholder) placeholder.remove();
+
+  // 4. Count
+  const countEl = document.getElementById('queue-count');
+  if (messages.length === 0) {
+    countEl.textContent = 'Queue is empty';
+  } else {
+    countEl.textContent = messages.length + ' message' + (messages.length === 1 ? '' : 's') + ' in queue';
+  }
+
+  // 5. Lang chips
+  renderLangChips(langCodes);
+
+  // 6. Re-anchor scroll to percentile after animations settle
+  if (changed) pendingScroll = true;
+}
+
+// ── Language filter chips ──────────────────────────────────────────────────
+function renderLangChips(codes) {
+  const container = document.getElementById('lang-chips');
+  const prev      = Array.from(container.querySelectorAll('[data-lang]')).map(el => el.dataset.lang).join();
+  if (prev === codes.join() && container.children.length === codes.length + (langFilter.length ? 1 : 0)) return;
+
+  container.innerHTML = '';
+  codes.forEach(code => {
+    const btn = document.createElement('button');
+    btn.className    = 'lang-chip' + (langFilter.includes(code) ? ' active' : '');
+    btn.dataset.lang = code;
+    btn.textContent  = code;
+    btn.addEventListener('click', () => {
+      langFilter = langFilter.includes(code)
+        ? langFilter.filter(l => l !== code)
+        : [...langFilter, code];
+      poll();
+    });
+    container.appendChild(btn);
+  });
+  if (langFilter.length) {
+    const clear = document.createElement('button');
+    clear.className   = 'lang-chip';
+    clear.textContent = '× clear';
+    clear.addEventListener('click', () => { langFilter = []; poll(); });
+    container.appendChild(clear);
+  }
+}
+
+// ── Percentile scroll ──────────────────────────────────────────────────────
+/*
+ * scrollToPercentile(p)
+ *
+ * Scrolls so the card at position round(p × (N−1)) in the newest-first list
+ * is vertically centred in the window.  Scroll position is clamped to the
+ * valid range [0, maxScroll], so if the target card is near the top or
+ * bottom of the page the centring is "as close as possible".
+ *
+ * p = 0   → newest card (index 0) → scrolls to top
+ * p = 0.5 → median card → centred
+ * p = 1   → oldest card (index N−1) → centred (or as low as page allows)
+ */
+function scrollToPercentile(p, smooth = true) {
+  const cards = Array.from(
+    document.querySelectorAll('#queue-msgs .msg-card:not(.msg-leaving)')
+  );
+  if (!cards.length) return;
+
+  const idx        = Math.round(p * (cards.length - 1));
+  const target     = cards[idx];
+  const rect       = target.getBoundingClientRect();
+  const cardCentreY = rect.top + window.scrollY + rect.height / 2;
+  const wantScroll  = cardCentreY - window.innerHeight / 2;
+  const maxScroll   = document.documentElement.scrollHeight - window.innerHeight;
+
+  window.scrollTo({
+    top:      Math.max(0, Math.min(maxScroll, wantScroll)),
+    behavior: smooth ? 'smooth' : 'instant',
+  });
+}
+
+// ── Polling loop ───────────────────────────────────────────────────────────
+async function poll() {
+  const params = new URLSearchParams();
+  langFilter.forEach(l => params.append('lang', l));
+  try {
+    const r    = await fetch(`/channel/${CHANNEL_ID}/queue/messages.json?${params}`,
+                             { headers: { 'X-CSRF-Token': CSRF_TOKEN } });
+    const data = await r.json();
+    updateQueue(data.messages, data.lang_codes);
+  } catch { /* silently ignore transient network errors */ }
+}
+
+// Seed chips immediately from server-rendered channel config so they
+// appear before the first poll completes, even when the queue is empty.
+renderLangChips({{ configured_languages | tojson }});
+
+setInterval(poll, 500);
+poll();
+
+// Apply percentile scroll after animations have settled (enter: ~200ms, leave: 280ms)
+setInterval(() => {
+  if (pendingScroll) {
+    pendingScroll = false;
+    const p = document.getElementById('percentile-slider').value / 100;
+    scrollToPercentile(p);
+  }
+}, 320);
+
+// ── Percentile slider ──────────────────────────────────────────────────────
+const slider    = document.getElementById('percentile-slider');
+const pLabel    = document.getElementById('percentile-value-label');
+
+function updatePercentileLabel(v) {
+  if      (v === 0)   pLabel.textContent = 'Latest';
+  else if (v === 100) pLabel.textContent = 'Oldest';
+  else                pLabel.textContent = v + 'th percentile';
+}
+
+slider.addEventListener('input', function () {
+  const v = parseInt(this.value);
+  updatePercentileLabel(v);
+  scrollToPercentile(v / 100, false);   // instant while dragging
+});
+
+// ── Simulation panel ───────────────────────────────────────────────────────
+{% if is_superadmin and sim_active %}
+(function () {
+
+  // Box-Muller normal sample
+  function randn() {
+    let u, v;
+    do { u = Math.random(); } while (u === 0);
+    do { v = Math.random(); } while (v === 0);
+    return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+  }
+
+  // Inter-arrival delay: normal distribution around 60000/freq ms, σ = 40%, min 200ms
+  function nextDelay(freqPerMin) {
+    const mean = 60000 / freqPerMin;
+    return Math.max(200, mean + randn() * mean * 0.4);
+  }
+
+  const POOL = [
+    { screen_name: 'Alice',   message: 'Great talk so far!',                          message_type: 'text'  },
+    { screen_name: 'Bob',     message: 'Can you repeat the last slide?',               message_type: 'text'  },
+    { screen_name: 'Carol',   message: 'This is really insightful.',                   message_type: 'text'  },
+    { screen_name: 'Dave',    message: '👍',                                            message_type: 'emoji' },
+    { screen_name: 'Eve',     message: 'When will the recording be available?',        message_type: 'text'  },
+    { screen_name: 'Frank',   message: 'Thank you for sharing this research.',         message_type: 'text'  },
+    { screen_name: 'Grace',   message: '❤️',                                            message_type: 'emoji' },
+    { screen_name: 'Heidi',   message: 'Is there a link to the slides?',               message_type: 'text'  },
+    { screen_name: 'Ivan',    message: 'Excellent presentation!',                      message_type: 'text'  },
+    { screen_name: 'Judy',    message: 'How does this compare to the previous approach?', message_type: 'text' },
+    { screen_name: 'Karl',    message: 'Will this be open-sourced?',                   message_type: 'text'  },
+    { screen_name: 'Laura',   message: '🔥',                                            message_type: 'emoji' },
+    { screen_name: 'Mallory', message: 'buy cheap watches at spam.example.com!!!',     message_type: 'text'  },
+    { screen_name: 'Niels',   message: 'Interesting, but I disagree with point 3.',   message_type: 'text'  },
+    { screen_name: 'Olivia',  message: 'Can you share the paper?',                     message_type: 'text'  },
+  ];
+
+  async function simInject(payload) {
+    await fetch('/admin/simulation/inject', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': CSRF_TOKEN },
+      body:    JSON.stringify(payload),
+    });
+  }
+
+  // Toggle panel open/close
+  const toggle  = document.getElementById('sim-toggle');
+  const body    = document.getElementById('sim-body');
+  const chevron = document.getElementById('sim-chevron');
+  toggle.addEventListener('click', () => {
+    const open = body.hidden;
+    body.hidden = !open;
+    chevron.textContent = open ? '▼' : '▲';
+    toggle.setAttribute('aria-expanded', open);
+  });
+
+  // Sync slider ↔ number input
+  const simSlider = document.getElementById('sim-slider');
+  const simNum    = document.getElementById('sim-num');
+  simSlider.addEventListener('input', () => { simNum.value = simSlider.value; });
+  simNum.addEventListener('input', () => {
+    const v = Math.min(240, Math.max(1, parseInt(simNum.value) || 1));
+    simSlider.value = simNum.value = v;
+  });
+
+  // Stream start / stop
+  let running = false;
+  let count   = 0;
+  const btn   = document.getElementById('sim-btn');
+  const countEl = document.getElementById('sim-count');
+
+  btn.addEventListener('click', () => {
+    running = !running;
+    btn.textContent = running ? 'Stop' : 'Start';
+    btn.classList.toggle('btn-primary', !running);
+    btn.classList.toggle('btn-danger',   running);
+    if (running) streamLoop();
+  });
+
+  async function streamLoop() {
+    while (running) {
+      const msg = POOL[Math.floor(Math.random() * POOL.length)];
+      await simInject(msg);
+      count++;
+      countEl.textContent = count + ' sent';
+      await new Promise(r => setTimeout(r, nextDelay(parseFloat(simNum.value))));
+    }
+  }
+
+})();
+{% endif %}
+</script>
+{% endblock %}

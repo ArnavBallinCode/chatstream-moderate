@@ -1,0 +1,35 @@
+{% extends 'base.html' %}
+{% block title %}Global Blacklist{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Global Blacklist</h1>
+  <a href="{{ url_for('admin.dashboard') }}" class="btn btn-ghost">Back</a>
+</div>
+<p class="text-muted">Users on this list are blocked across all channels.</p>
+
+{% if not entries %}
+  <p class="text-muted">Global blacklist is empty.</p>
+{% else %}
+  <table class="table">
+    <thead><tr><th>Screen name</th><th>Sender ID</th><th>CentralAuth ID</th><th>Added by</th><th>Added</th><th></th></tr></thead>
+    <tbody>
+    {% for e in entries %}
+    <tr>
+      <td>{{ e.screen_name }}</td>
+      <td>{{ e.sender_id or '—' }}</td>
+      <td>{{ e.centralauth_id or '—' }}</td>
+      <td>{{ e.added_by_wiki_username }}</td>
+      <td>{{ e.added_at.strftime('%Y-%m-%d %H:%M') }}</td>
+      <td>
+        <form method="post" action="{{ url_for('admin.global_blacklist_remove') }}" class="inline-form">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <input type="hidden" name="id" value="{{ e.id }}">
+          <button type="submit" class="btn btn-sm btn-danger-ghost">Remove</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+{% endif %}
+{% endblock %}

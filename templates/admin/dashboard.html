@@ -1,0 +1,35 @@
+{% extends 'base.html' %}
+{% block title %}Superadmin Dashboard{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Superadmin Dashboard</h1>
+  <div class="page-header-actions">
+    <a href="{{ url_for('admin.channels') }}" class="btn btn-primary">Manage Channels</a>
+    <a href="{{ url_for('admin.global_blacklist') }}" class="btn btn-ghost">Global Blacklist</a>
+    <a href="{{ url_for('admin.simulation') }}" class="btn btn-ghost">Simulation</a>
+  </div>
+</div>
+<div class="stats-row">
+  <div class="stat-card"><div class="stat-value">{{ channels | length }}</div><div class="stat-label">Channels</div></div>
+  <div class="stat-card"><div class="stat-value">{{ channels | selectattr('is_active') | list | length }}</div><div class="stat-label">Active</div></div>
+</div>
+<table class="table">
+  <thead><tr><th>Channel</th><th>Status</th><th>Visibility</th><th>Actions</th></tr></thead>
+  <tbody>
+  {% for ch in channels %}
+  <tr>
+    <td><a href="{{ url_for('admin.channel_edit', channel_id=ch.id) }}">{{ ch.name }}</a> <small class="text-muted">{{ ch.id }}</small></td>
+    <td>{% if ch.is_active %}<span class="badge badge-active">Active</span>{% else %}<span class="badge badge-inactive">Inactive</span>{% endif %}</td>
+    <td>{% if ch.is_public %}Public{% else %}Private{% endif %}</td>
+    <td>
+      <a href="{{ url_for('queue.queue_page', channel_id=ch.id) }}" class="btn btn-sm btn-ghost">Queue</a>
+      <a href="{{ url_for('admin.channel_edit', channel_id=ch.id) }}" class="btn btn-sm btn-ghost">Edit</a>
+      {% if ch.id == 'simulation' %}
+        <a href="{{ url_for('admin.simulation') }}" class="btn btn-sm btn-ghost">Simulate</a>
+      {% endif %}
+    </td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

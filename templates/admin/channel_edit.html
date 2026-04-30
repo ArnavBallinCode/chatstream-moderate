@@ -1,0 +1,88 @@
+{% extends 'base.html' %}
+{% block title %}Edit — {{ channel.name }}{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Edit Channel <span class="page-subtitle">{{ channel.id }}</span></h1>
+  <a href="{{ url_for('admin.channels') }}" class="btn btn-ghost">Back</a>
+</div>
+
+<div class="two-col">
+  <div class="card">
+    <h2>Channel settings</h2>
+    <form method="post" action="{{ url_for('admin.channel_edit_post', channel_id=channel.id) }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <div class="form-row">
+        <label>Name</label>
+        <input type="text" name="name" value="{{ channel.name | e }}" required class="form-input">
+      </div>
+      <div class="form-row">
+        <label>Description</label>
+        <input type="text" name="description" value="{{ channel.description or '' | e }}" class="form-input">
+      </div>
+      <div class="form-row checkbox-row">
+        <label><input type="checkbox" name="is_active" {% if channel.is_active %}checked{% endif %}> Active</label>
+      </div>
+      <div class="form-row checkbox-row">
+        <label><input type="checkbox" name="is_public" {% if channel.is_public %}checked{% endif %}> Public</label>
+      </div>
+      <div class="form-row">
+        <label>Custom CSS</label>
+        <textarea name="custom_css" class="form-input form-textarea" placeholder="/* injected into display pages */">{{ channel.custom_css or '' }}</textarea>
+      </div>
+      <button type="submit" class="btn btn-primary">Save</button>
+    </form>
+
+    <hr>
+    <h3>Webhook</h3>
+    <div class="form-row">
+      <label>HMAC secret</label>
+      <code class="secret-display">{{ channel.webhook_hmac_secret }}</code>
+    </div>
+    <p class="text-muted small">Send as <code>X-Eventyay-Signature: sha256=&lt;HMAC-SHA256(body, secret)&gt;</code></p>
+
+    <hr>
+    <h3>Danger zone</h3>
+    <form method="post" action="{{ url_for('admin.channel_delete', channel_id=channel.id) }}"
+          onsubmit="return confirm('Delete channel {{ channel.name | e }}? This cannot be undone.')">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <button type="submit" class="btn btn-danger">Delete channel</button>
+    </form>
+  </div>
+
+  <div class="card">
+    <h2>Channel admins</h2>
+    <form method="post" action="{{ url_for('admin.channel_admin_add', channel_id=channel.id) }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <div class="form-row">
+        <label>Wikimedia username</label>
+        <input type="text" name="wiki_username" required class="form-input">
+      </div>
+      <div class="form-row">
+        <label>CentralAuth ID</label>
+        <input type="number" name="centralauth_id" required class="form-input">
+      </div>
+      <button type="submit" class="btn btn-primary">Add admin</button>
+    </form>
+    <table class="table" style="margin-top:1rem">
+      <thead><tr><th>Username</th><th>CentralAuth ID</th><th></th></tr></thead>
+      <tbody>
+      {% for m in admins %}
+      <tr>
+        <td>{{ m.wiki_username }}</td>
+        <td>{{ m.centralauth_id }}</td>
+        <td>
+          <form method="post" action="{{ url_for('admin.channel_admin_remove', channel_id=channel.id) }}" class="inline-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <input type="hidden" name="centralauth_id" value="{{ m.centralauth_id }}">
+            <button type="submit" class="btn btn-sm btn-danger-ghost">Remove</button>
+          </form>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="3" class="text-muted">No admins assigned.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

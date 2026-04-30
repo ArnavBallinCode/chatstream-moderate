@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}ChatStream Moderate{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
+  {% block head %}{% endblock %}
+</head>
+<body>
+  <header>
+    <div class="header-inner">
+      <a href="{{ url_for('index') }}" class="header-title">ChatStream Moderate</a>
+      {% if current_username %}
+        <span class="header-user">
+          {{ current_username }}
+          {% if is_superadmin %}
+            &nbsp;·&nbsp;<a href="{{ url_for('admin.dashboard') }}">admin</a>
+          {% endif %}
+          &nbsp;·&nbsp;
+          <form method="post" action="{{ url_for('logout') }}" class="inline-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <button type="submit" class="header-link-btn">log out</button>
+          </form>
+        </span>
+      {% else %}
+        <span class="header-user"><a href="{{ url_for('login') }}">log in with Wikimedia</a></span>
+      {% endif %}
+    </div>
+  </header>
+
+  <main class="container">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        <ul class="flash-list">
+          {% for category, msg in messages %}
+            <li class="flash flash-{{ category if category != 'message' else 'info' }}">{{ msg }}</li>
+          {% endfor %}
+        </ul>
+      {% endif %}
+    {% endwith %}
+    {% block content %}{% endblock %}
+  </main>
+
+  <script src="https://unpkg.com/htmx.org@1.9.12" crossorigin="anonymous"></script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

@@ -1,0 +1,41 @@
+{% extends 'base.html' %}
+{% block title %}Channels{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Channels</h1>
+</div>
+
+<div class="card" style="max-width:480px;margin-bottom:2rem">
+  <h2>Create channel</h2>
+  <form method="post" action="{{ url_for('admin.channels_create') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <div class="form-row">
+      <label>ID (slug)</label>
+      <input type="text" name="id" required pattern="[a-z0-9\-]+" placeholder="e.g. wikimania-2026" class="form-input">
+    </div>
+    <div class="form-row">
+      <label>Name</label>
+      <input type="text" name="name" required class="form-input">
+    </div>
+    <div class="form-row">
+      <label>Description</label>
+      <input type="text" name="description" class="form-input">
+    </div>
+    <button type="submit" class="btn btn-primary">Create</button>
+  </form>
+</div>
+
+<table class="table">
+  <thead><tr><th>ID</th><th>Name</th><th>Status</th><th>Actions</th></tr></thead>
+  <tbody>
+  {% for ch in channels %}
+  <tr>
+    <td><code>{{ ch.id }}</code></td>
+    <td>{{ ch.name }}</td>
+    <td>{% if ch.is_active %}<span class="badge badge-active">Active</span>{% else %}<span class="badge badge-inactive">Inactive</span>{% endif %}</td>
+    <td><a href="{{ url_for('admin.channel_edit', channel_id=ch.id) }}" class="btn btn-sm btn-ghost">Edit</a></td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

@@ -1,0 +1,36 @@
+{% extends 'base.html' %}
+{% block title %}ChatStream Moderate{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>ChatStream Moderate</h1>
+</div>
+
+{% if not current_username %}
+  <div class="card center-card">
+    <p>Real-time chat moderation for Eventyay channels.</p>
+    <a href="{{ url_for('login') }}" class="btn btn-primary">Log in with Wikimedia</a>
+  </div>
+{% elif not channels %}
+  <div class="card center-card">
+    <p>You have no channels assigned. Contact a superadmin to get access.</p>
+  </div>
+{% else %}
+  <div class="channel-list">
+    {% for ch in channels %}
+    <div class="card channel-card">
+      <div class="channel-card-header">
+        <h2>{{ ch.name }}</h2>
+        {% if not ch.is_active %}<span class="badge badge-inactive">Inactive</span>{% endif %}
+        {% if not ch.is_public %}<span class="badge badge-private">Private</span>{% endif %}
+      </div>
+      {% if ch.description %}<p class="channel-desc">{{ ch.description }}</p>{% endif %}
+      <div class="channel-card-actions">
+        <a href="{{ url_for('queue.queue_page', channel_id=ch.id) }}" class="btn btn-primary">Moderation Queue</a>
+        <a href="{{ url_for('display.rss_all', channel_id=ch.id) }}" class="btn btn-secondary">RSS Feed</a>
+        <a href="{{ url_for('admin.channel_settings', channel_id=ch.id) }}" class="btn btn-ghost">Settings</a>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+{% endif %}
+{% endblock %}

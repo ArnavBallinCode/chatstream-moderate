@@ -1,0 +1,62 @@
+{% extends 'base.html' %}
+{% block title %}Moderation Log — {{ channel.name }}{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>{{ channel.name }} <span class="page-subtitle">Moderation Log</span></h1>
+  <a href="{{ url_for('queue.queue_page', channel_id=channel.id) }}" class="btn btn-ghost">Back to queue</a>
+</div>
+<p class="text-muted small" style="margin-bottom:1rem">
+  Last 500 decisions, newest first.
+  Each row is one decision that took effect.
+  If two moderators acted on the same message, only the winning (most restrictive) decision appears.
+</p>
+{% if not entries %}
+  <p class="text-muted">No decisions logged yet.</p>
+{% else %}
+  <table class="table">
+    <thead>
+      <tr>
+        <th>Time</th>
+        <th>Moderator</th>
+        <th>Decision</th>
+        <th>Sender</th>
+        <th>Message</th>
+        <th>Type</th>
+        <th>Wait</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for e in entries %}
+    <tr>
+      <td style="white-space:nowrap">{{ e.decided_at.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+      <td>{{ e.moderator_wiki_username or '—' }}</td>
+      <td>
+        {% if e.decision == 'approve' %}
+          <span class="badge badge-active">approve</span>
+        {% elif e.decision == 'highlight' %}
+          <span class="badge badge-hl">highlight</span>
+        {% elif e.decision in ('reject', 'reject-similar') %}
+          <span class="badge badge-inactive">{{ e.decision }}</span>
+        {% elif e.decision == 'ban' %}
+          <span class="badge" style="background:rgba(107,26,26,.12);color:#6b1a1a">ban</span>
+        {% else %}
+          <span class="badge badge-inactive">{{ e.decision }}</span>
+        {% endif %}
+      </td>
+      <td>{{ e.screen_name | e }}</td>
+      <td style="max-width:340px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
+          title="{{ e.message_text | e }}">{{ e.message_text | e }}</td>
+      <td>{{ e.message_type }}</td>
+      <td style="white-space:nowrap">
+        {% if e.arrived_at %}
+          {% set secs = (e.decided_at - e.arrived_at).total_seconds() | int %}
+          {% if secs < 60 %}{{ secs }}s
+          {% else %}{{ (secs // 60) }}m {{ secs % 60 }}s{% endif %}
+        {% else %}—{% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+{% endif %}
+{% endblock %}

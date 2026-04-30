@@ -1,0 +1,72 @@
+{% if lang_codes %}
+<div class="lang-filter">
+  <span class="lang-filter-label">Filter by language:</span>
+  {% for code in lang_codes %}
+  <a href="{{ url_for('queue.queue_messages', channel_id=channel.id, lang=(lang_filter + [code]) if code not in lang_filter else (lang_filter | reject('equalto', code) | list)) }}"
+     class="lang-chip {% if code in lang_filter %}active{% endif %}"
+     hx-get="{{ url_for('queue.queue_messages', channel_id=channel.id) }}"
+     hx-target="#queue-msgs"
+     hx-swap="innerHTML">{{ code }}</a>
+  {% endfor %}
+  {% if lang_filter %}
+  <a href="{{ url_for('queue.queue_messages', channel_id=channel.id) }}"
+     hx-get="{{ url_for('queue.queue_messages', channel_id=channel.id) }}"
+     hx-target="#queue-msgs"
+     hx-swap="innerHTML"
+     class="lang-chip clear">clear</a>
+  {% endif %}
+</div>
+{% endif %}
+
+<div class="queue-count">
+  {% if messages %}
+    <strong>{{ messages | length }}</strong> message{{ 's' if messages | length != 1 }} in queue
+  {% else %}
+    Queue is empty
+  {% endif %}
+</div>
+
+{% for msg in messages %}
+<div class="msg-card" id="msg-{{ msg.id }}">
+  <div class="msg-avatar">
+    {% if msg.profile_img %}
+      <img src="{{ msg.profile_img | e }}" alt="{{ msg.screen_name | e }}" class="avatar-img">
+    {% else %}
+      <div class="avatar-initial">{{ msg.screen_name[0] | upper }}</div>
+    {% endif %}
+  </div>
+
+  <div class="msg-body">
+    <div class="msg-meta">
+      <span class="msg-name">{{ msg.screen_name | e }}</span>
+      {% if msg.message_type == 'emoji' %}<span class="badge badge-emoji">emoji</span>{% endif %}
+      {% if msg.message_type == 'qa' %}<span class="badge badge-qa">Q&amp;A</span>{% endif %}
+      {% if msg.detected_language %}<span class="badge badge-lang">{{ msg.detected_language }}</span>{% endif %}
+      <span class="msg-time">{{ msg.arrived_at.strftime('%H:%M:%S') }}</span>
+    </div>
+    <div class="msg-text">{{ msg.message | e }}</div>
+  </div>
+
+  <div class="msg-actions">
+    <button class="btn btn-highlight"
+            title="Highlight (approve + mark as highlight)"
+            onclick="apiPost('/api/channel/{{ channel.id }}/message/{{ msg.id }}/highlight', {})">💡</button>
+    <button class="btn btn-accept"
+            title="Accept"
+            onclick="apiPost('/api/channel/{{ channel.id }}/message/{{ msg.id }}/approve', {})">Accept</button>
+    <button class="btn btn-reject-ghost"
+            title="Reject"
+            onclick="apiPost('/api/channel/{{ channel.id }}/message/{{ msg.id }}/reject', {})">Reject</button>
+    <button class="btn btn-reject-plus"
+            title="Reject this and similar messages currently in queue"
+            onclick="apiPost('/api/channel/{{ channel.id }}/message/{{ msg.id }}/reject-similar', {})">Reject++</button>
+    <button class="btn btn-ban"
+            title="Ban user from this channel (also rejects all their queued messages)"
+            onclick="apiPost('/api/channel/{{ channel.id }}/block-user', {
+              screen_name: {{ msg.screen_name | tojson }},
+              {% if msg.sender_id %}sender_id: {{ msg.sender_id | tojson }},{% endif %}
+              {% if msg.centralauth_id %}centralauth_id: '{{ msg.centralauth_id }}',{% endif %}
+            })">Ban</button>
+  </div>
+</div>
+{% endfor %}

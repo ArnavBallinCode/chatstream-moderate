@@ -1,0 +1,89 @@
+{% extends 'base.html' %}
+{% block title %}Settings — {{ channel.name }}{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>{{ channel.name }} <span class="page-subtitle">Settings</span></h1>
+  <a href="{{ url_for('queue.queue_page', channel_id=channel.id) }}" class="btn btn-ghost">Back to queue</a>
+</div>
+
+<div class="two-col">
+  <div class="card">
+    <h2>Channel settings</h2>
+    <form method="post" action="{{ url_for('admin.channel_settings_post', channel_id=channel.id) }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <div class="form-row checkbox-row">
+        <label><input type="checkbox" name="is_public" {% if channel.is_public %}checked{% endif %}> Public (display URL requires no token)</label>
+      </div>
+      <div class="form-row checkbox-row">
+        <label><input type="checkbox" name="emoji_auto_approve" {% if channel.emoji_auto_approve %}checked{% endif %}> Auto-approve duplicate emojis within 10 seconds</label>
+      </div>
+      <hr>
+      <h3>Language detection</h3>
+      <div class="form-row checkbox-row">
+        <label><input type="checkbox" name="language_detection_enabled" {% if channel.language_detection_enabled %}checked{% endif %}> Enable language detection</label>
+      </div>
+      <div class="form-row">
+        <label>Default language (BCP 47)</label>
+        <input type="text" name="default_language" value="{{ channel.default_language | e }}" placeholder="en" class="form-input form-input-sm">
+      </div>
+      <div class="form-row">
+        <label>Likely languages (comma-separated)</label>
+        <input type="text" name="likely_languages"
+               value="{{ channel.likely_languages | fromjson | join(', ') if channel.likely_languages else '' }}"
+               placeholder="en, fr, nl, de" class="form-input">
+      </div>
+      <button type="submit" class="btn btn-primary">Save settings</button>
+    </form>
+
+    <hr>
+    <h3>Display token</h3>
+    <p class="text-muted small">Add <code>?token=...</code> to the RSS URL for private channels.</p>
+    <code class="secret-display">{{ channel.display_token }}</code>
+    <form method="post" action="{{ url_for('admin.channel_token_regenerate', channel_id=channel.id) }}" style="margin-top:.5rem">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <button type="submit" class="btn btn-ghost btn-sm">Regenerate token</button>
+    </form>
+
+    <hr>
+    <h3>RSS feeds</h3>
+    <p><a href="{{ url_for('display.rss_all', channel_id=channel.id) }}" target="_blank">All approved messages</a></p>
+    <p><a href="{{ url_for('display.rss_highlights', channel_id=channel.id) }}" target="_blank">Highlights only</a></p>
+  </div>
+
+  <div class="card">
+    <h2>Moderators</h2>
+    <form method="post" action="{{ url_for('admin.moderator_add', channel_id=channel.id) }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <div class="form-row">
+        <label>Wikimedia username</label>
+        <input type="text" name="wiki_username" required class="form-input">
+      </div>
+      <div class="form-row">
+        <label>CentralAuth ID</label>
+        <input type="number" name="centralauth_id" required class="form-input">
+      </div>
+      <button type="submit" class="btn btn-primary">Add moderator</button>
+    </form>
+    <table class="table" style="margin-top:1rem">
+      <thead><tr><th>Username</th><th>CentralAuth ID</th><th></th></tr></thead>
+      <tbody>
+      {% for m in moderators %}
+      <tr>
+        <td>{{ m.wiki_username }}</td>
+        <td>{{ m.centralauth_id }}</td>
+        <td>
+          <form method="post" action="{{ url_for('admin.moderator_remove', channel_id=channel.id) }}" class="inline-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <input type="hidden" name="centralauth_id" value="{{ m.centralauth_id }}">
+            <button type="submit" class="btn btn-sm btn-danger-ghost">Remove</button>
+          </form>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="3" class="text-muted">No moderators assigned.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
