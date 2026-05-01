@@ -207,6 +207,18 @@ Optional (falls back to SQLite): `db-host`, `db-user`, `db-password`, `db-name`.
 
 ---
 
+## Toolforge reference
+
+Lessons repo (ground truth for Toolforge deployment):
+`../wikimedia-coding-agent-lessons/toolforge/lessons.md`
+
+Fetch these docs at the start of any Toolforge-related task:
+- https://wikitech.wikimedia.org/wiki/Help:Toolforge/Quickstart
+- https://wikitech.wikimedia.org/wiki/Help:Toolforge/Web/Python
+- https://wikitech.wikimedia.org/wiki/Help:Toolforge/Kubernetes/Webservices
+
+---
+
 ## Testing without OAuth
 
 With `FLASK_DEBUG=1`:

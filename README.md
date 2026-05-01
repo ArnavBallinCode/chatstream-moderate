@@ -111,18 +111,11 @@ Public consumers require admin approval — plan for several days wait. Owner-on
 ### 3. SSH into Toolforge
 
 ```bash
-ssh login.toolforge.org
+ssh USERID@login.toolforge.org
 become chatstream-moderate
 ```
 
-Install uv if not present:
-
-```bash
-curl -LsSf https://astral.sh/uv/install.sh | sh
-source $HOME/.local/bin/env
-```
-
-Add `source $HOME/.local/bin/env` to `~/.bashrc` for future sessions.
+> **Reference**: `../wikimedia-coding-agent-lessons/toolforge/lessons.md` has ground-truth Toolforge deployment notes.
 
 ### 4. Clone the repository
 
@@ -177,7 +170,7 @@ ln -s ~/chatstream-moderate ~/www/python/src
 Open a webservice shell to create the venv — **must be done inside the container**, not on the bastion:
 
 ```bash
-toolforge webservice python3.11 shell
+toolforge webservice --backend=kubernetes python3.11 shell
 ```
 
 Inside the shell:
