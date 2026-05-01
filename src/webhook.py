@@ -5,7 +5,7 @@ import uuid
 from datetime import datetime, timezone, timedelta
 from flask import Blueprint, request, jsonify, render_template, abort, current_app
 from sqlalchemy import or_
-from src.models import db, Channel, Message, Blacklist, GlobalBlacklist, BlockedPattern
+from src.models import db, Channel, Message, Blacklist, GlobalBlacklist, BlockedPattern, Whitelist
 from src.utils import levenshtein, parse_likely_languages
 
 webhook_bp = Blueprint('webhook', __name__)
@@ -94,6 +94,24 @@ def _is_blocked(channel: Channel, screen_name: str, sender_id: str | None, centr
     return False
 
 
+def _is_whitelisted(channel: Channel, screen_name: str, sender_id: str | None, centralauth_id: int | None) -> bool:
+    conditions: list = []
+    if sender_id:
+        conditions.append(Whitelist.sender_id == sender_id)
+    if centralauth_id:
+        conditions.append(Whitelist.centralauth_id == centralauth_id)
+    if screen_name:
+        conditions.append(Whitelist.screen_name == screen_name)
+    if not conditions:
+        return False
+    return bool(
+        Whitelist.query
+        .filter(Whitelist.channel_id == channel.id)
+        .filter(or_(*conditions))
+        .first()
+    )
+
+
 def _matches_blocked_pattern(channel_id: str, text: str) -> bool:
     patterns = BlockedPattern.query.filter_by(channel_id=channel_id).all()
     return any(levenshtein(text, p.pattern_text) <= 2 for p in patterns)
@@ -116,8 +134,15 @@ def _detect_language(channel: Channel, text: str, user_language: str | None) -> 
 
 
 def _process_message(channel: Channel, data: dict) -> None:
-    screen_name  = (data.get('screen_name') or 'Unknown').strip()
     sender_id    = str(data['sender_id']) if data.get('sender_id') else None
+    raw_name     = (data.get('screen_name') or '').strip()
+    if raw_name:
+        screen_name = raw_name
+    else:
+        # No screen name: assign a persistent "Anonymous #N" label for this channel
+        channel.anonymous_counter += 1
+        screen_name = f'{channel.anonymous_label} #{channel.anonymous_counter}'
+        db.session.flush()  # write the incremented counter before commit
     centralauth_id = int(data['centralauth_id']) if data.get('centralauth_id') else None
     message_text = (data.get('message') or '').strip()
     message_type = data.get('message_type', 'text')
@@ -135,7 +160,9 @@ def _process_message(channel: Channel, data: dict) -> None:
         return
 
     status = 'queued'
-    if message_type == 'emoji' and channel.emoji_auto_approve:
+    if _is_whitelisted(channel, screen_name, sender_id, centralauth_id):
+        status = 'approved'
+    elif message_type == 'emoji' and channel.emoji_auto_approve:
         cutoff = datetime.utcnow() - timedelta(seconds=10)
         if Message.query.filter(
             Message.channel_id == channel.id,

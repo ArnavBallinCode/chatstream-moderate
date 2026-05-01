@@ -10,16 +10,17 @@
   </div>
 </div>
 <div class="stats-row">
-  <div class="stat-card"><div class="stat-value">{{ channels | length }}</div><div class="stat-label">Channels</div></div>
-  <div class="stat-card"><div class="stat-value">{{ channels | selectattr('is_active') | list | length }}</div><div class="stat-label">Active</div></div>
+  <div class="stat-card"><div class="stat-value">{{ active | length }}</div><div class="stat-label">Active</div></div>
+  <div class="stat-card"><div class="stat-value">{{ archived | length }}</div><div class="stat-label">Archived</div></div>
 </div>
+
 <table class="table">
   <thead><tr><th>Channel</th><th>Status</th><th>Visibility</th><th>Actions</th></tr></thead>
   <tbody>
-  {% for ch in channels %}
+  {% for ch in active %}
   <tr>
     <td><a href="{{ url_for('admin.channel_edit', channel_id=ch.id) }}">{{ ch.name }}</a> <small class="text-muted">{{ ch.id }}</small></td>
-    <td>{% if ch.is_active %}<span class="badge badge-active">Active</span>{% else %}<span class="badge badge-inactive">Inactive</span>{% endif %}</td>
+    <td><span class="badge badge-active">Active</span></td>
     <td>{% if ch.is_public %}Public{% else %}Private{% endif %}</td>
     <td>
       <a href="{{ url_for('queue.queue_page', channel_id=ch.id) }}" class="btn btn-sm btn-ghost">Queue</a>
@@ -29,7 +30,29 @@
       {% endif %}
     </td>
   </tr>
+  {% else %}
+  <tr><td colspan="4" class="text-muted">No active channels.</td></tr>
   {% endfor %}
   </tbody>
 </table>
+
+{% if archived %}
+<h2 style="margin-top:2rem;font-size:1rem;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.04em">Archived</h2>
+<table class="table" style="opacity:.7">
+  <thead><tr><th>Channel</th><th>Archived</th><th>Visibility</th><th>Actions</th></tr></thead>
+  <tbody>
+  {% for ch in archived %}
+  <tr>
+    <td><a href="{{ url_for('admin.channel_edit', channel_id=ch.id) }}">{{ ch.name }}</a> <small class="text-muted">{{ ch.id }}</small></td>
+    <td><span class="badge badge-inactive">{{ ch.archived_at.strftime('%Y-%m-%d') }}</span></td>
+    <td>{% if ch.is_public %}Public{% else %}Private{% endif %}</td>
+    <td>
+      <a href="{{ url_for('queue.queue_page', channel_id=ch.id) }}" class="btn btn-sm btn-ghost">Queue</a>
+      <a href="{{ url_for('admin.channel_edit', channel_id=ch.id) }}" class="btn btn-sm btn-ghost">Edit</a>
+    </td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endif %}
 {% endblock %}

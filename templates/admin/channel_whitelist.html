@@ -1,0 +1,38 @@
+{% extends 'base.html' %}
+{% block title %}Whitelist — {{ channel.name }}{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>{{ channel.name }} <span class="page-subtitle">Whitelist</span></h1>
+  <a href="{{ url_for('queue.queue_page', channel_id=channel.id) }}" class="btn btn-ghost">Back to queue</a>
+</div>
+<p class="text-muted small" style="margin-bottom:1rem">
+  Messages from whitelisted senders are auto-approved without entering the queue.
+  Matched by sender ID (primary), then centralauth ID, then screen name.
+</p>
+
+{% if not entries %}
+  <p class="text-muted">No whitelisted users for this channel.</p>
+{% else %}
+  <table class="table">
+    <thead><tr><th>Screen name</th><th>Sender ID</th><th>CentralAuth ID</th><th>Added by</th><th>Added</th><th>Actions</th></tr></thead>
+    <tbody>
+    {% for e in entries %}
+    <tr>
+      <td>{{ e.screen_name or '—' }}</td>
+      <td>{{ e.sender_id or '—' }}</td>
+      <td>{{ e.centralauth_id or '—' }}</td>
+      <td>{{ e.added_by_wiki_username }}</td>
+      <td>{{ e.added_at.strftime('%Y-%m-%d %H:%M') }}</td>
+      <td>
+        <form method="post" action="{{ url_for('admin.channel_whitelist_remove', channel_id=channel.id) }}" class="inline-form">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <input type="hidden" name="id" value="{{ e.id }}">
+          <button type="submit" class="btn btn-sm btn-danger-ghost">Remove</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+{% endif %}
+{% endblock %}

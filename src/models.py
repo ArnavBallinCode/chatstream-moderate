@@ -19,7 +19,10 @@ class Channel(db.Model):
     default_language          = db.Column(String(10), nullable=False, default='en')
     likely_languages          = db.Column(Text, nullable=True)   # JSON array
     emoji_auto_approve        = db.Column(Boolean, nullable=False, default=True)
+    anonymous_label           = db.Column(String(64), nullable=False, default='Anonymous')
+    anonymous_counter         = db.Column(Integer, nullable=False, default=0)
     created_at                = db.Column(DateTime, nullable=False, default=datetime.utcnow)
+    archived_at               = db.Column(DateTime, nullable=True)
 
 
 class ChannelMember(db.Model):
@@ -62,13 +65,29 @@ class Blacklist(db.Model):
     __tablename__ = 'blacklist'
     id                    = db.Column(Integer, primary_key=True, autoincrement=True)
     channel_id            = db.Column(String(64), db.ForeignKey('channels.id', ondelete='CASCADE'), nullable=False)
-    screen_name           = db.Column(String(255), nullable=False)
+    screen_name           = db.Column(String(255), nullable=True, default='')  # display only; primary key is sender_id when available
     sender_id             = db.Column(String(255), nullable=True)
     centralauth_id        = db.Column(Integer, nullable=True)
     added_by_centralauth_id  = db.Column(Integer, nullable=False)
     added_by_wiki_username   = db.Column(String(255), nullable=False)
     added_at              = db.Column(DateTime, nullable=False, default=datetime.utcnow)
-    __table_args__        = (UniqueConstraint('channel_id', 'screen_name', name='uq_blacklist'),)
+    __table_args__        = (Index('ix_blacklist_sender', 'channel_id', 'sender_id', unique=True),)
+    # NULLs are allowed multiple times in UNIQUE indexes (SQLite + MySQL), so
+    # entries without a sender_id are deduplicated at the application level.
+
+
+class Whitelist(db.Model):
+    """Per-channel allowlist: messages from these senders are auto-approved."""
+    __tablename__ = 'whitelist'
+    id                    = db.Column(Integer, primary_key=True, autoincrement=True)
+    channel_id            = db.Column(String(64), db.ForeignKey('channels.id', ondelete='CASCADE'), nullable=False)
+    screen_name           = db.Column(String(255), nullable=True, default='')
+    sender_id             = db.Column(String(255), nullable=True)
+    centralauth_id        = db.Column(Integer, nullable=True)
+    added_by_centralauth_id  = db.Column(Integer, nullable=False)
+    added_by_wiki_username   = db.Column(String(255), nullable=False)
+    added_at              = db.Column(DateTime, nullable=False, default=datetime.utcnow)
+    __table_args__        = (Index('ix_whitelist_sender', 'channel_id', 'sender_id', unique=True),)
 
 
 class GlobalBlacklist(db.Model):

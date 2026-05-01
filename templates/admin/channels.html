@@ -28,14 +28,25 @@
 <table class="table">
   <thead><tr><th>ID</th><th>Name</th><th>Status</th><th>Actions</th></tr></thead>
   <tbody>
-  {% for ch in channels %}
+  {% for ch in active %}
   <tr>
     <td><code>{{ ch.id }}</code></td>
     <td>{{ ch.name }}</td>
-    <td>{% if ch.is_active %}<span class="badge badge-active">Active</span>{% else %}<span class="badge badge-inactive">Inactive</span>{% endif %}</td>
+    <td><span class="badge badge-active">Active</span></td>
     <td><a href="{{ url_for('admin.channel_edit', channel_id=ch.id) }}" class="btn btn-sm btn-ghost">Edit</a></td>
   </tr>
   {% endfor %}
+  {% for ch in archived %}
+  <tr style="opacity:.6">
+    <td><code>{{ ch.id }}</code></td>
+    <td>{{ ch.name }}</td>
+    <td><span class="badge badge-inactive">Archived {{ ch.archived_at.strftime('%Y-%m-%d') }}</span></td>
+    <td><a href="{{ url_for('admin.channel_edit', channel_id=ch.id) }}" class="btn btn-sm btn-ghost">Edit</a></td>
+  </tr>
+  {% endfor %}
+  {% if not active and not archived %}
+  <tr><td colspan="4" class="text-muted">No channels yet.</td></tr>
+  {% endif %}
   </tbody>
 </table>
 {% endblock %}

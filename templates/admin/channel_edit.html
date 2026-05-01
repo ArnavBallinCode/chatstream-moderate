@@ -42,6 +42,19 @@
 
     <hr>
     <h3>Danger zone</h3>
+    {% if channel.archived_at %}
+      <p class="text-muted small">Archived {{ channel.archived_at.strftime('%Y-%m-%d %H:%M') }} UTC.</p>
+      <form method="post" action="{{ url_for('admin.channel_unarchive', channel_id=channel.id) }}" class="inline-form" style="margin-bottom:.5rem">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <button type="submit" class="btn btn-ghost">Reopen channel</button>
+      </form>
+    {% else %}
+      <form method="post" action="{{ url_for('admin.channel_archive', channel_id=channel.id) }}" class="inline-form" style="margin-bottom:.5rem"
+            onsubmit="return confirm('Archive {{ channel.name | e }}? No new messages will be accepted.')">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <button type="submit" class="btn btn-warning">Archive channel</button>
+      </form>
+    {% endif %}
     <form method="post" action="{{ url_for('admin.channel_delete', channel_id=channel.id) }}"
           onsubmit="return confirm('Delete channel {{ channel.name | e }}? This cannot be undone.')">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">

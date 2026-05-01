@@ -5,7 +5,7 @@ import uuid
 from datetime import datetime, timezone
 import requests as _http
 from flask import Blueprint, request, render_template, redirect, url_for, flash, jsonify
-from src.models import db, Channel, ChannelMember, Blacklist, GlobalBlacklist
+from src.models import db, Channel, ChannelMember, Blacklist, GlobalBlacklist, Whitelist
 from src.auth import superadmin_required, channel_role_required, verify_csrf, current_centralauth_id, current_wiki_username
 from src.utils import generate_token
 
@@ -19,13 +19,19 @@ admin_bp = Blueprint('admin', __name__)
 @admin_bp.get('/admin/')
 @superadmin_required
 def dashboard():
-    return render_template('admin/dashboard.html', channels=Channel.query.order_by(Channel.name).all())
+    all_channels = Channel.query.order_by(Channel.name).all()
+    active   = [c for c in all_channels if not c.archived_at]
+    archived = [c for c in all_channels if c.archived_at]
+    return render_template('admin/dashboard.html', active=active, archived=archived)
 
 
 @admin_bp.get('/admin/channels')
 @superadmin_required
 def channels():
-    return render_template('admin/channels.html', channels=Channel.query.order_by(Channel.name).all())
+    all_channels = Channel.query.order_by(Channel.name).all()
+    return render_template('admin/channels.html',
+                           active=[c for c in all_channels if not c.archived_at],
+                           archived=[c for c in all_channels if c.archived_at])
 
 
 @admin_bp.post('/admin/channels/create')
@@ -215,11 +221,37 @@ def channel_settings_post(channel_id: str):
     ch.language_detection_enabled = 'language_detection_enabled' in request.form
     ch.default_language          = request.form.get('default_language', 'en').strip()
     ch.emoji_auto_approve        = 'emoji_auto_approve' in request.form
+    anon = request.form.get('anonymous_label', '').strip()
+    ch.anonymous_label           = anon or 'Anonymous'
     likely = request.form.get('likely_languages', '').strip()
     ch.likely_languages = json.dumps([l.strip() for l in likely.split(',') if l.strip()]) if likely else None
     db.session.commit()
     flash('Settings saved.')
     return redirect(url_for('admin.channel_settings', channel_id=channel_id))
+
+
+@admin_bp.post('/channel/<channel_id>/archive')
+@channel_role_required('admin')
+def channel_archive(channel_id: str):
+    verify_csrf()
+    ch = Channel.query.get_or_404(channel_id)
+    ch.is_active  = False
+    ch.archived_at = datetime.utcnow()
+    db.session.commit()
+    flash(f'"{ch.name}" archived. No new messages will be accepted.')
+    return redirect(url_for('queue.queue_page', channel_id=channel_id))
+
+
+@admin_bp.post('/channel/<channel_id>/unarchive')
+@channel_role_required('admin')
+def channel_unarchive(channel_id: str):
+    verify_csrf()
+    ch = Channel.query.get_or_404(channel_id)
+    ch.is_active  = True
+    ch.archived_at = None
+    db.session.commit()
+    flash(f'"{ch.name}" reopened.')
+    return redirect(url_for('queue.queue_page', channel_id=channel_id))
 
 
 @admin_bp.post('/channel/<channel_id>/token/regenerate')
@@ -277,6 +309,23 @@ def channel_blacklist_remove(channel_id: str):
     Blacklist.query.filter_by(id=int(request.form.get('id', 0)), channel_id=channel_id).delete()
     db.session.commit()
     return redirect(url_for('admin.channel_blacklist', channel_id=channel_id))
+
+
+@admin_bp.get('/channel/<channel_id>/whitelist')
+@channel_role_required('admin', 'moderator')
+def channel_whitelist(channel_id: str):
+    channel = Channel.query.get_or_404(channel_id)
+    entries = Whitelist.query.filter_by(channel_id=channel_id).order_by(Whitelist.added_at.desc()).all()
+    return render_template('admin/channel_whitelist.html', channel=channel, entries=entries)
+
+
+@admin_bp.post('/channel/<channel_id>/whitelist/remove')
+@channel_role_required('admin', 'moderator')
+def channel_whitelist_remove(channel_id: str):
+    verify_csrf()
+    Whitelist.query.filter_by(id=int(request.form.get('id', 0)), channel_id=channel_id).delete()
+    db.session.commit()
+    return redirect(url_for('admin.channel_whitelist', channel_id=channel_id))
 
 
 @admin_bp.post('/channel/<channel_id>/blacklist/export')

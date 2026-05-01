@@ -4,13 +4,33 @@
 <div class="page-header">
   <h1>{{ channel.name }} <span class="page-subtitle">Moderation Queue</span></h1>
   <div class="page-header-actions">
+    <a href="{{ url_for('queue.channel_log', channel_id=channel.id) }}" class="btn btn-ghost">Log</a>
     <a href="{{ url_for('admin.channel_blacklist', channel_id=channel.id) }}" class="btn btn-ghost">Blacklist</a>
+    <a href="{{ url_for('admin.channel_whitelist', channel_id=channel.id) }}" class="btn btn-ghost">Whitelist</a>
     {% if channel_role == 'admin' %}
       <a href="{{ url_for('admin.channel_settings', channel_id=channel.id) }}" class="btn btn-ghost">Languages &amp; Settings</a>
+      {% if channel.archived_at %}
+        <form method="post" action="{{ url_for('admin.channel_unarchive', channel_id=channel.id) }}" class="inline-form">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <button type="submit" class="btn btn-ghost">Reopen channel</button>
+        </form>
+      {% else %}
+        <form method="post" action="{{ url_for('admin.channel_archive', channel_id=channel.id) }}" class="inline-form"
+              onsubmit="return confirm('Archive {{ channel.name | e }}? This stops accepting new messages.')">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <button type="submit" class="btn btn-ghost" style="color:var(--muted)">Archive channel</button>
+        </form>
+      {% endif %}
     {% endif %}
     <a href="{{ url_for('display.rss_all', channel_id=channel.id) }}" class="btn btn-ghost">RSS</a>
   </div>
 </div>
+
+{% if channel.archived_at %}
+<div class="flash flash-warning">
+  This channel was archived on {{ channel.archived_at.strftime('%Y-%m-%d %H:%M') }} UTC and is no longer accepting new messages.
+</div>
+{% endif %}
 
 <!--
   Sticky focus bar
@@ -27,6 +47,8 @@
   <input type="range" id="percentile-slider" min="0" max="100" value="0" step="1"
          class="percentile-slider">
 </div>
+
+<div class="queue-stats" id="queue-stats"></div>
 
 <div class="queue-toolbar">
   <span id="queue-count" class="queue-count"></span>
@@ -93,11 +115,11 @@ function selectCard(id) {
     cardMap.get(id).classList.add('selected');
 }
 
-// Keys 1–5 map to button index 0–4 on the selected card
+// Keys 1–6 map to button index 0–5 on the selected card
 document.addEventListener('keydown', e => {
   if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
   if (e.key === 'Escape') { selectCard(null); return; }
-  const idx = { '1': 0, '2': 1, '3': 2, '4': 3, '5': 4 }[e.key];
+  const idx = { '1': 0, '2': 1, '3': 2, '4': 3, '5': 4, '6': 5 }[e.key];
   if (idx === undefined || selectedId === null) return;
   const card = cardMap.get(selectedId);
   if (!card) { selectCard(null); return; }
@@ -214,19 +236,31 @@ function makeCard(msg) {
     actions.appendChild(btn);
   });
 
+  const userBody = { screen_name: msg.screen_name };
+  if (msg.sender_id)      userBody.sender_id      = msg.sender_id;
+  if (msg.centralauth_id) userBody.centralauth_id = String(msg.centralauth_id);
+
   const ban = document.createElement('button');
   ban.className = 'btn btn-ban';
   ban.title     = 'Ban user from this channel — rejects all their queued messages (key 5)';
   ban.appendChild(hint('5'));
   ban.appendChild(document.createTextNode('Ban'));
-  const banBody = { screen_name: msg.screen_name };
-  if (msg.sender_id)      banBody.sender_id      = msg.sender_id;
-  if (msg.centralauth_id) banBody.centralauth_id = String(msg.centralauth_id);
   ban.addEventListener('click', e => {
     e.stopPropagation();
-    apiPost(`/api/channel/${CHANNEL_ID}/block-user`, banBody);
+    apiPost(`/api/channel/${CHANNEL_ID}/block-user`, userBody);
   });
   actions.appendChild(ban);
+
+  const allow = document.createElement('button');
+  allow.className = 'btn btn-whitelist';
+  allow.title     = 'Whitelist user — future messages auto-approved (key 6)';
+  allow.appendChild(hint('6'));
+  allow.appendChild(document.createTextNode('Allow'));
+  allow.addEventListener('click', e => {
+    e.stopPropagation();
+    apiPost(`/api/channel/${CHANNEL_ID}/whitelist-user`, userBody);
+  });
+  actions.appendChild(allow);
 
   body.appendChild(actions);
   card.appendChild(body);
@@ -238,6 +272,11 @@ function updateQueue(messages, langCodes) {
   const container = document.getElementById('queue-msgs');
   const newIds    = new Set(messages.map(m => m.id));
   let   changed   = false;
+
+  // Capture the selected card's current screen position before any DOM mutations
+  // so we can compensate the scroll and keep it visually stable.
+  const selCard      = selectedId !== null ? cardMap.get(selectedId) : null;
+  const selTopBefore = selCard ? selCard.getBoundingClientRect().top : null;
 
   // 1. Remove cards no longer in queue (slide out)
   for (const [id, card] of cardMap) {
@@ -274,7 +313,14 @@ function updateQueue(messages, langCodes) {
   const placeholder = container.querySelector('.queue-loading');
   if (placeholder) placeholder.remove();
 
-  // 4. Count
+  // 4. Compensate scroll to keep selected card at same screen position
+  //    (new cards prepended above push it down — undo that shift instantly).
+  if (selTopBefore !== null && selCard && document.contains(selCard)) {
+    const delta = selCard.getBoundingClientRect().top - selTopBefore;
+    if (Math.abs(delta) > 0.5) window.scrollBy({ top: delta, behavior: 'instant' });
+  }
+
+  // 5. Count
   const countEl = document.getElementById('queue-count');
   if (messages.length === 0) {
     countEl.textContent = 'Queue is empty';
@@ -282,11 +328,11 @@ function updateQueue(messages, langCodes) {
     countEl.textContent = messages.length + ' message' + (messages.length === 1 ? '' : 's') + ' in queue';
   }
 
-  // 5. Lang chips
+  // 6. Lang chips
   renderLangChips(langCodes);
 
-  // 6. Re-anchor scroll to percentile after animations settle
-  if (changed) pendingScroll = true;
+  // 7. If no card is selected, re-anchor scroll to percentile after animations settle
+  if (changed && selCard === null) pendingScroll = true;
 }
 
 // ── Language filter chips ──────────────────────────────────────────────────
@@ -350,6 +396,40 @@ function scrollToPercentile(p, smooth = true) {
   });
 }
 
+// ── Auto-focus at percentile ───────────────────────────────────────────────
+/*
+ * If the current selectedId is no longer in the queue (dealt with or gone),
+ * pick the card at the percentile position and scroll to it.
+ * Does nothing if the selected card is still present.
+ */
+function autoSelectAtPercentile() {
+  if (selectedId !== null && cardMap.has(selectedId)) return;
+  const cards = Array.from(
+    document.querySelectorAll('#queue-msgs .msg-card:not(.msg-leaving)')
+  );
+  if (!cards.length) { selectedId = null; return; }
+  const p   = document.getElementById('percentile-slider').value / 100;
+  const idx = Math.round(p * (cards.length - 1));
+  selectCard(parseInt(cards[idx].dataset.id));
+  scrollToPercentile(p, /* smooth= */ true);
+}
+
+// ── Stats bar ──────────────────────────────────────────────────────────────
+function renderStats(stats) {
+  const el = document.getElementById('queue-stats');
+  if (!stats || !Object.keys(stats).length) { el.textContent = ''; return; }
+  const approved    = (stats.approved    || 0) + (stats.highlighted || 0);
+  const rejected    = (stats.rejected    || 0) + (stats['reject-similar'] || 0);
+  const highlighted =  stats.highlighted || 0;
+  const banned      =  stats.ban         || 0;
+  const parts = [];
+  if (approved)    parts.push('✓ ' + approved    + ' approved');
+  if (highlighted) parts.push('💡 ' + highlighted + ' highlighted');
+  if (rejected)    parts.push('✗ ' + rejected    + ' rejected');
+  if (banned)      parts.push('⊘ ' + banned      + ' banned');
+  el.textContent = parts.length ? parts.join(' · ') : '';
+}
+
 // ── Polling loop ───────────────────────────────────────────────────────────
 async function poll() {
   const params = new URLSearchParams();
@@ -359,6 +439,8 @@ async function poll() {
                              { headers: { 'X-CSRF-Token': CSRF_TOKEN } });
     const data = await r.json();
     updateQueue(data.messages, data.lang_codes);
+    renderStats(data.stats);
+    autoSelectAtPercentile();
   } catch { /* silently ignore transient network errors */ }
 }
 
@@ -369,12 +451,15 @@ renderLangChips({{ configured_languages | tojson }});
 setInterval(poll, 500);
 poll();
 
-// Apply percentile scroll after animations have settled (enter: ~200ms, leave: 280ms)
+// Apply percentile scroll after animations have settled (enter: ~200ms, leave: 280ms).
+// Only fires when there is no selected card (auto-select handles the selected case).
 setInterval(() => {
   if (pendingScroll) {
     pendingScroll = false;
-    const p = document.getElementById('percentile-slider').value / 100;
-    scrollToPercentile(p);
+    if (selectedId === null || !cardMap.has(selectedId)) {
+      const p = document.getElementById('percentile-slider').value / 100;
+      scrollToPercentile(p);
+    }
   }
 }, 320);
 

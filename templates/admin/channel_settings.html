@@ -17,6 +17,12 @@
       <div class="form-row checkbox-row">
         <label><input type="checkbox" name="emoji_auto_approve" {% if channel.emoji_auto_approve %}checked{% endif %}> Auto-approve duplicate emojis within 10 seconds</label>
       </div>
+      <div class="form-row">
+        <label>Anonymous sender label</label>
+        <input type="text" name="anonymous_label" value="{{ channel.anonymous_label | e }}"
+               placeholder="Anonymous" class="form-input form-input-sm">
+        <small class="text-muted">Used when a message arrives with no screen name. A counter is appended, e.g. "Anonymous #3".</small>
+      </div>
       <hr>
       <h3>Language detection</h3>
       <div class="form-row checkbox-row">

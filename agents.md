@@ -1,0 +1,216 @@
+# agents.md — LLM agent orientation for chatstream-moderate
+
+This file is written for LLM agents. Read it before exploring the codebase.
+
+---
+
+## What this project does
+
+Eventyay sends chat messages to this tool via HMAC-signed webhooks. Moderators see the messages in a real-time queue, decide approve / reject / highlight / ban / allow, and approved messages are published via RSS. Multiple moderators can work the same queue simultaneously — competing decisions use most-restrictive-wins.
+
+---
+
+## Start here
+
+| Goal | Read first |
+|------|-----------|
+| Understand the data | `src/models.py` — all 9 models, ~140 lines |
+| Understand message intake | `src/webhook.py` — `_process_message()` |
+| Understand moderation actions | `src/queue_bp.py` — `_set_status()`, `block_user()`, `whitelist_user()` |
+| Understand auth/roles | `src/auth.py` — 72 lines, all decorators |
+| Understand config + secrets | `app.py` — `_read_secret()`, `create_app()` |
+| Understand the queue UI | `templates/queue.html` — the most complex template |
+
+---
+
+## Architecture
+
+```
+Eventyay → POST /webhook/channel/<id>   (HMAC verified)
+               ↓
+         webhook.py: _process_message()
+               ↓
+         checks: blacklisted? blocked pattern? whitelisted?
+               ↓
+         Message row inserted (status = queued | approved)
+               ↓
+Moderator ← GET /channel/<id>/queue/messages.json  (polled 500ms)
+               ↓
+         POST /api/channel/<id>/message/<id>/approve|reject|highlight
+         POST /api/channel/<id>/block-user
+         POST /api/channel/<id>/whitelist-user
+               ↓
+         ModerationLog row written
+               ↓
+RSS consumers ← GET /rss/<id>  (approved + highlighted)
+```
+
+---
+
+## Data model
+
+```
+Channel
+  id (slug), name, is_active, archived_at
+  anonymous_label, anonymous_counter   ← used when screen_name absent
+  emoji_auto_approve, language_detection_enabled
+  default_language, likely_languages (JSON)
+  display_token, webhook_hmac_secret
+
+Message
+  channel_id, status (queued|approved|highlighted|rejected)
+  screen_name (display only), sender_id (primary identity), centralauth_id
+  message, message_type (text|emoji|qa)
+  arrived_at, processed_at, processed_by_centralauth_id
+
+Blacklist / Whitelist          ← per-channel; nearly identical structure
+  channel_id, screen_name, sender_id (unique key), centralauth_id
+  added_by_centralauth_id, added_by_wiki_username
+
+GlobalBlacklist                ← same structure, no channel_id
+
+BlockedPattern
+  channel_id, pattern_text     ← Levenshtein ≤ 2 match at intake
+
+ModerationLog                  ← immutable; one row per effective decision
+  channel_id, message_id (nullable FK), decision
+  screen_name, message_text    ← denormalised; survives message deletion
+  arrived_at, decided_at
+
+ChannelMember
+  channel_id, centralauth_id, wiki_username, role (admin|moderator)
+```
+
+**Identity priority**: `sender_id` > `centralauth_id` > `screen_name`.
+`screen_name` is display-only; when absent, intake assigns `"<anonymous_label> #<counter>"`.
+
+---
+
+## Role hierarchy
+
+```
+superadmin         ← wiki_username in app.py SUPERADMIN_USERS list
+  ↓ manages
+channel admin      ← ChannelMember.role == 'admin'
+  ↓ manages
+channel moderator  ← ChannelMember.role == 'moderator'
+```
+
+Superadmins bypass all channel role checks (`is_superadmin()` short-circuits `channel_role_required`).
+
+Auth decorators live in `src/auth.py`:
+- `@superadmin_required`
+- `@channel_role_required('admin')` or `('admin', 'moderator')`
+- `verify_csrf()` — checks `csrf_token` form field or `X-CSRF-Token` header
+
+---
+
+## Key invariants
+
+**Most-restrictive-wins** (`queue_bp.py:_set_status`):  
+`DECISION_RANK = {highlighted: 1, approved: 2, rejected: 3}`  
+A message status can only move to a higher rank, never lower. Returns `{superseded: True}` if ignored.
+
+**Blacklist/whitelist dedup** (application-level, not DB constraint):  
+Check by `sender_id` first when present, else by `screen_name`.  
+The unique DB index is on `(channel_id, sender_id)` — NULLs are allowed multiple times in both SQLite and MySQL UNIQUE indexes.
+
+**Webhook replay protection**:  
+`timestamp` must be within 5 minutes of `now`. Check in `webhook.py:webhook_receive`.
+
+**Simulation uses loopback HTTP** (`admin_bp.py:simulation_inject`):  
+`requests.post(request.host_url + '/webhook/channel/simulation', ...)`.  
+Do NOT use `test_client()` — it shares the SQLAlchemy session and causes teardown corruption.
+
+**`db.create_all()` runs on every startup** (`app.py:create_app`):  
+New tables are created automatically. Schema changes that alter existing tables require a Flask-Migrate migration (`flask db migrate && flask db upgrade`).
+
+---
+
+## Message intake order
+
+`webhook.py:_process_message()`:
+
+1. Deduplicate by `eventyay_message_id` — silently skip
+2. Check global blacklist → drop
+3. Check channel blacklist → drop
+4. Check blocked patterns (Levenshtein ≤ 2 on lowercased text) → drop
+5. Check channel whitelist → `status = 'approved'`
+6. Emoji auto-approve (if enabled + identical emoji approved in last 10s) → `status = 'approved'`
+7. Default → `status = 'queued'`
+8. Run language detection (text only, if enabled)
+9. Insert Message row
+
+---
+
+## Queue UI (templates/queue.html)
+
+- Polls `GET /channel/<id>/queue/messages.json` every 500ms
+- Response: `{messages, lang_codes, stats}`
+- Stats: all-time decision counts from ModerationLog grouped by decision string
+- New cards prepend (newest at top); removed cards slide out with CSS transition
+- `selectedId` — the keyboard-armed card; keys 1–6 fire actions
+  - 1 highlight · 2 approve · 3 reject · 4 reject++ · 5 ban · 6 allow (whitelist)
+- `autoSelectAtPercentile()` — runs after each poll; selects card at percentile position when nothing is selected
+- Scroll compensation: `selCard.getBoundingClientRect().top` captured before DOM mutations, `window.scrollBy` after
+
+---
+
+## Common tasks
+
+**Add a new per-message action**:
+1. Add route in `queue_bp.py` (POST `/api/channel/<id>/message/<id>/...`)
+2. Add button in `makeCard()` in `queue.html` (extend `actionDefs` array or add standalone like ban/allow)
+3. Add key binding in the keydown handler
+
+**Add a new channel config field**:
+1. Add column to `Channel` in `models.py`
+2. Add form field in `templates/admin/channel_settings.html`
+3. Read it in `channel_settings_post` in `admin_bp.py`
+
+**Add a new moderation log decision type**:
+1. Call `_log(msg, 'your-decision-string')` before changing status
+2. Update the decision badge in `templates/queue/log.html`
+
+**Change who can do X**:
+- Swap `@superadmin_required` ↔ `@channel_role_required('admin')` ↔ `@channel_role_required('admin', 'moderator')`
+
+---
+
+## Files you will NOT need to touch for most tasks
+
+- `src/display_bp.py` — RSS feed output, rarely changes
+- `wsgi.py` — one line, WSGI entry point
+- `uwsgi.ini` — uWSGI config, only for server tuning
+- `static/css/app.css` — only for visual changes
+
+---
+
+## Secrets and config
+
+Read at startup via `_read_secret(name)` in `app.py`:
+- Tries `/etc/passwords/<name>` first (Toolforge Kubernetes secrets)
+- Falls back to env var `<NAME_UPPERCASED>`
+
+For local dev: set env vars directly or via `.env` (never committed).
+
+Required secrets: `oauth-client-id`, `oauth-client-secret`, `oauth-redirect-uri`, `secret-key`.  
+Optional (falls back to SQLite): `db-host`, `db-user`, `db-password`, `db-name`.
+
+---
+
+## Database
+
+- **Local dev**: SQLite at `instance/dev.db` (auto-created)
+- **Production**: MariaDB at `tools.db.svc.wikimedia.cloud`, database name `s12345__chatstream`, charset `utf8mb4`
+- SQLAlchemy URL: `mysql+pymysql://USER:PASS@tools.db.svc.wikimedia.cloud/NAME?charset=utf8mb4`
+
+---
+
+## Testing without OAuth
+
+With `FLASK_DEBUG=1`:
+```
+GET /dev-login?username=YourWikimediaName
+```
+Sets session directly. Username must be in `SUPERADMIN_USERS` for superadmin access.

@@ -1,6 +1,7 @@
 from datetime import datetime
 from flask import Blueprint, request, jsonify, render_template, abort
-from src.models import db, Channel, Message, Blacklist, BlockedPattern, ModerationLog
+from sqlalchemy import func
+from src.models import db, Channel, Message, Blacklist, BlockedPattern, ModerationLog, Whitelist
 from src.auth import channel_role_required, verify_csrf, current_centralauth_id, current_wiki_username
 from src.utils import levenshtein, parse_likely_languages
 
@@ -108,6 +109,14 @@ def queue_messages_json(channel_id: str):
         Message.detected_language.isnot(None),
     ).distinct().all()}
     configured = set(parse_likely_languages(channel.likely_languages))
+
+    # All-time decision counts from the moderation log
+    stats_rows = (db.session.query(ModerationLog.decision, func.count(ModerationLog.id))
+                  .filter(ModerationLog.channel_id == channel_id)
+                  .group_by(ModerationLog.decision)
+                  .all())
+    stats = {row[0]: row[1] for row in stats_rows}
+
     return jsonify({
         'messages': [{
             'id':                m.id,
@@ -121,6 +130,7 @@ def queue_messages_json(channel_id: str):
             'centralauth_id':    m.centralauth_id,
         } for m in messages],
         'lang_codes': sorted(detected | configured),
+        'stats':      stats,
     })
 
 
@@ -168,26 +178,70 @@ def reject_similar(channel_id: str, msg_id: int):
 def block_user(channel_id: str):
     verify_csrf()
     screen_name = request.form.get('screen_name', '').strip()
-    if not screen_name:
-        return jsonify({'ok': False, 'error': 'screen_name required'})
-    if not Blacklist.query.filter_by(channel_id=channel_id, screen_name=screen_name).first():
+    sender_id   = request.form.get('sender_id') or None
+    if not screen_name and not sender_id:
+        return jsonify({'ok': False, 'error': 'screen_name or sender_id required'})
+    # Dedup: prefer sender_id as the canonical key when available
+    existing = (
+        Blacklist.query.filter_by(channel_id=channel_id, sender_id=sender_id).first()
+        if sender_id else
+        Blacklist.query.filter_by(channel_id=channel_id, screen_name=screen_name).first()
+    )
+    if not existing:
         db.session.add(Blacklist(
             channel_id=channel_id,
             screen_name=screen_name,
-            sender_id=request.form.get('sender_id') or None,
+            sender_id=sender_id,
             centralauth_id=int(request.form['centralauth_id']) if request.form.get('centralauth_id') else None,
             added_by_centralauth_id=current_centralauth_id(),
             added_by_wiki_username=current_wiki_username() or '',
         ))
         now = datetime.utcnow()
         uid = current_centralauth_id()
-        for m in Message.query.filter_by(
-            channel_id=channel_id, screen_name=screen_name, status='queued'
-        ).all():
-            _log(m, 'ban')
-            m.status                    = 'rejected'
-            m.processed_at              = now
-            m.processed_by_centralauth_id = uid
+        # Reject all queued messages from this sender (match by sender_id OR screen_name)
+        for m in Message.query.filter_by(channel_id=channel_id, status='queued').all():
+            if (sender_id and m.sender_id == sender_id) or \
+               (screen_name and m.screen_name == screen_name):
+                _log(m, 'ban')
+                m.status                    = 'rejected'
+                m.processed_at              = now
+                m.processed_by_centralauth_id = uid
+        db.session.commit()
+    return jsonify({'ok': True})
+
+
+@queue_bp.post('/api/channel/<channel_id>/whitelist-user')
+@channel_role_required('admin', 'moderator')
+def whitelist_user(channel_id: str):
+    verify_csrf()
+    screen_name = request.form.get('screen_name', '').strip()
+    sender_id   = request.form.get('sender_id') or None
+    if not screen_name and not sender_id:
+        return jsonify({'ok': False, 'error': 'screen_name or sender_id required'})
+    existing = (
+        Whitelist.query.filter_by(channel_id=channel_id, sender_id=sender_id).first()
+        if sender_id else
+        Whitelist.query.filter_by(channel_id=channel_id, screen_name=screen_name).first()
+    )
+    if not existing:
+        db.session.add(Whitelist(
+            channel_id=channel_id,
+            screen_name=screen_name,
+            sender_id=sender_id,
+            centralauth_id=int(request.form['centralauth_id']) if request.form.get('centralauth_id') else None,
+            added_by_centralauth_id=current_centralauth_id(),
+            added_by_wiki_username=current_wiki_username() or '',
+        ))
+        now = datetime.utcnow()
+        uid = current_centralauth_id()
+        # Auto-approve any queued messages from this sender
+        for m in Message.query.filter_by(channel_id=channel_id, status='queued').all():
+            if (sender_id and m.sender_id == sender_id) or \
+               (screen_name and m.screen_name == screen_name):
+                _log(m, 'approve')
+                m.status                    = 'approved'
+                m.processed_at              = now
+                m.processed_by_centralauth_id = uid
         db.session.commit()
     return jsonify({'ok': True})
 
