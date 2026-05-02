@@ -20,7 +20,7 @@ TOOL_NAME = "chatstream-moderate"
 
 # ── Community configuration ────────────────────────────────────────────────────
 # Add Wikimedia usernames of superadmins here.
-SUPERADMIN_USERS: list[str] = ["Effeietsanders", "Exec8"]
+SUPERADMIN_USERS: list[str] = ["Effeietsanders", "Exec8", "Arnav Angarkar"]
 # ── End of community configuration ────────────────────────────────────────────
 
 
