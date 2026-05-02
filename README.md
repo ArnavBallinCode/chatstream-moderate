@@ -146,14 +146,16 @@ EXIT;
 
 ### 6. Set secrets
 
+Use **single quotes** to avoid shell interpretation:
+
 ```bash
-toolforge envvars create OAUTH_CLIENT_ID     "YOUR_CLIENT_ID"
-toolforge envvars create OAUTH_CLIENT_SECRET "YOUR_CLIENT_SECRET"
-toolforge envvars create OAUTH_REDIRECT_URI  "https://chatstream-moderate.toolforge.org/oauth-callback"
+toolforge envvars create OAUTH_CLIENT_ID     'YOUR_CLIENT_ID'
+toolforge envvars create OAUTH_CLIENT_SECRET 'YOUR_CLIENT_SECRET'
+toolforge envvars create OAUTH_REDIRECT_URI  'https://chatstream-moderate.toolforge.org/oauth-callback'
 toolforge envvars create SECRET_KEY          "$(python3 -c 'import secrets; print(secrets.token_hex(32))')"
-toolforge envvars create DB_USER             "s12345"
-toolforge envvars create DB_PASSWORD         "YOUR_DB_PASSWORD"
-toolforge envvars create DB_NAME             "s12345__chatstream"
+toolforge envvars create DB_USER             's12345'
+toolforge envvars create DB_PASSWORD         'YOUR_DB_PASSWORD'
+toolforge envvars create DB_NAME             's12345__chatstream'
 ```
 
 `toolforge envvars list` masks values after creation — keep a local record.
@@ -167,17 +169,18 @@ mkdir -p ~/www/python
 ln -s ~/chatstream-moderate ~/www/python/src
 ```
 
-Open a webservice shell to create the venv — **must be done inside the container**, not on the bastion:
+Open a webservice shell to create the venv — **must be done inside the container**, not on the bastion. The bastion runs Python 3.13; the webservice runs 3.11. Running pip from the bastion corrupts the venv.
 
 ```bash
 toolforge webservice --backend=kubernetes python3.11 shell
 ```
 
-Inside the shell:
+Inside the shell, create the venv and install packages. Use `get-pip.py` piped directly — `ensurepip` and `python3 -m venv` (without `--without-pip`) hang due to subprocess restrictions in the shell pod:
 
 ```bash
-python3 -m venv ~/www/python/venv
-~/www/python/venv/bin/pip install -e ~/chatstream-moderate
+python3 -m venv ~/www/python/venv --without-pip
+curl -sS https://bootstrap.pypa.io/get-pip.py | ~/www/python/venv/bin/python3
+~/www/python/venv/bin/python3 -m pip install -e ~/chatstream-moderate
 exit
 ```
 
@@ -196,13 +199,36 @@ Check logs:
 toolforge webservice logs
 ```
 
+`lseek: Illegal seek` lines in the logs are harmless uWSGI noise — filter with `grep -v lseek`.
+
 The database schema is created automatically on first startup.
 
 ### Updating
 
+For code changes (no new dependencies):
+
 ```bash
 bash ~/chatstream-moderate/deploy.sh
 ```
+
+For dependency changes (new packages added to `pyproject.toml`), you must reinstall inside the webservice shell:
+
+```bash
+toolforge webservice --backend=kubernetes python3.11 shell
+~/www/python/venv/bin/python3 -m pip install -e ~/chatstream-moderate
+exit
+cd ~
+toolforge webservice --backend=kubernetes python3.11 restart
+```
+
+### Troubleshooting
+
+**`WARNING: Ignoring invalid distribution ~ip`** — corrupted pip leftover from a failed install. Fix from the bastion:
+```bash
+rm -rf ~/www/python/venv/lib/python3.11/site-packages/~ip*
+```
+
+**OAuth `invalid_scope` error** — the Wikimedia OAuth 2.0 scope must be `basic`, not `openid`. Check `app.py`.
 
 ---
 

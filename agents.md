@@ -227,6 +227,15 @@ Fetch these docs at the start of any Toolforge-related task:
 - https://wikitech.wikimedia.org/wiki/Help:Toolforge/Web/Python
 - https://wikitech.wikimedia.org/wiki/Help:Toolforge/Kubernetes/Webservices
 
+**Lessons learned from initial deploy (2026-05-02)**:
+- Bastion runs Python 3.13; webservice runs Python 3.11. Never run pip from the bastion — it corrupts the venv.
+- `python3 -m venv` (with pip) and `ensurepip` hang in the webservice shell pod due to subprocess restrictions. Use `--without-pip` then bootstrap with `curl -sS https://bootstrap.pypa.io/get-pip.py | ~/www/python/venv/bin/python3`.
+- Always use `~/www/python/venv/bin/python3 -m pip`, never the `pip` binary (it breaks after reinstalls).
+- `WARNING: Ignoring invalid distribution ~ip` — corrupted pip. Fix: `rm -rf ~/www/python/venv/lib/python3.11/site-packages/~ip*` from bastion.
+- `lseek: Illegal seek` in logs — harmless uWSGI noise on `/dev/stdout`. Filter with `grep -v lseek`.
+- Wikimedia OAuth 2.0 scope is `basic`, not `openid`.
+- `deploy.sh` needs no pip step — editable installs pick up code changes via symlink. Pip only needed in webservice shell when dependencies change.
+
 ---
 
 ## Testing without OAuth
