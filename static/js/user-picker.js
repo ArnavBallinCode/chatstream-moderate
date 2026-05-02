@@ -1,11 +1,14 @@
 // Wikimedia username autocomplete widget.
-// Activate by calling initUserPicker(containerEl, submitBtn).
+// Activate by calling initUserPicker(containerEl, submitBtn, roleSelect).
 //
 // Expected HTML inside container:
 //   <input class="user-picker-input" type="text">
 //   <ul  class="user-picker-suggestions"></ul>
 //   <input type="hidden" name="wiki_username">
 //   <input type="hidden" name="centralauth_id">
+//
+// Optional: data-members='{"<centralauth_id>": "admin"|"moderator", ...}'
+// on the container enables current-role detection.
 
 (function () {
   const MW_API = 'https://en.wikipedia.org/w/api.php';
@@ -26,20 +29,34 @@
     return user.centralids?.CentralAuth ?? null;
   }
 
-  function initUserPicker(container, submitBtn) {
+  function initUserPicker(container, submitBtn, roleSelect) {
     const textInput  = container.querySelector('.user-picker-input');
     const list       = container.querySelector('.user-picker-suggestions');
     const nameHidden = container.querySelector('input[name="wiki_username"]');
     const caidHidden = container.querySelector('input[name="centralauth_id"]');
+    const members    = JSON.parse(container.dataset.members || '{}');
 
     let debounceTimer = null;
-    let selectedName  = null;
+    let currentRole   = null;  // role of the currently selected user, if already a member
+
+    function resetRoleLabels() {
+      if (!roleSelect) return;
+      Array.from(roleSelect.options).forEach(opt => {
+        opt.textContent = opt.textContent.replace(' (current)', '');
+      });
+    }
+
+    function updateSubmitState() {
+      if (!submitBtn || !roleSelect) return;
+      submitBtn.disabled = (currentRole !== null && roleSelect.value === currentRole);
+    }
 
     function clearSelection() {
-      selectedName = null;
       nameHidden.value = '';
       caidHidden.value = '';
-      if (submitBtn) submitBtn.disabled = true;
+      currentRole = null;
+      resetRoleLabels();
+      if (submitBtn) submitBtn.disabled = false;
     }
 
     function closeList() {
@@ -49,7 +66,6 @@
 
     function select(name) {
       textInput.value = name;
-      selectedName = name;
       closeList();
       fetchCentralAuthId(name).then(caid => {
         if (caid == null) {
@@ -61,7 +77,16 @@
         textInput.setCustomValidity('');
         nameHidden.value = name;
         caidHidden.value = caid;
-        if (submitBtn) submitBtn.disabled = false;
+
+        // Check if this user is already a member
+        resetRoleLabels();
+        currentRole = members[String(caid)] ?? null;
+        if (currentRole && roleSelect) {
+          const matchingOpt = Array.from(roleSelect.options).find(o => o.value === currentRole);
+          if (matchingOpt) matchingOpt.textContent += ' (current)';
+          roleSelect.value = currentRole;
+        }
+        updateSubmitState();
       });
     }
 
@@ -104,6 +129,8 @@
       }
     });
 
+    if (roleSelect) roleSelect.addEventListener('change', updateSubmitState);
+
     document.addEventListener('click', e => {
       if (!container.contains(e.target)) closeList();
     });
@@ -112,9 +139,10 @@
   // Auto-init all .user-picker containers on the page
   document.addEventListener('DOMContentLoaded', () => {
     document.querySelectorAll('.user-picker').forEach(container => {
-      const form      = container.closest('form');
-      const submitBtn = form?.querySelector('[type="submit"]');
-      initUserPicker(container, submitBtn);
+      const form       = container.closest('form');
+      const submitBtn  = form?.querySelector('[type="submit"]');
+      const roleSelect = form?.querySelector('select[name="role"]');
+      initUserPicker(container, submitBtn, roleSelect);
     });
   });
 })();

@@ -219,8 +219,10 @@ def channel_settings(channel_id: str):
     admins      = ChannelMember.query.filter_by(channel_id=channel_id, role='admin').all()
     moderators  = ChannelMember.query.filter_by(channel_id=channel_id, role='moderator').all()
     superadmins = current_app.config.get('SUPERADMIN_USERS', [])
+    members_by_caid = {str(m.centralauth_id): m.role for m in admins + moderators}
     return render_template('admin/channel_settings.html', channel=channel,
-                           admins=admins, moderators=moderators, superadmins=superadmins)
+                           admins=admins, moderators=moderators,
+                           superadmins=superadmins, members_by_caid=members_by_caid)
 
 
 @admin_bp.post('/channel/<channel_id>/settings')

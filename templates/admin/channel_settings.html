@@ -120,7 +120,7 @@
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <div class="form-row">
         <label>Wikimedia username</label>
-        <div class="user-picker">
+        <div class="user-picker" data-members="{{ members_by_caid | tojson | e }}">
           <input type="text" class="form-input user-picker-input" placeholder="Start typing a username…" autocomplete="off">
           <ul class="user-picker-suggestions hidden"></ul>
           <input type="hidden" name="wiki_username">
@@ -134,7 +134,7 @@
           <option value="moderator">Moderator</option>
         </select>
       </div>
-      <button type="submit" class="btn btn-primary" disabled>Add</button>
+      <button type="submit" class="btn btn-primary">Add</button>
     </form>
 
     <table class="table" style="margin-top:1rem">
