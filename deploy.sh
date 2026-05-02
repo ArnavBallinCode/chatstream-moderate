@@ -10,6 +10,6 @@ git pull
 
 echo "==> Restarting web service..."
 cd ~
-toolforge webservice --backend=kubernetes python3.11 restart
+toolforge webservice --backend=kubernetes python3.13 restart
 
 echo "==> Done."

@@ -169,10 +169,10 @@ mkdir -p ~/www/python
 ln -s ~/chatstream-moderate ~/www/python/src
 ```
 
-Open a webservice shell to create the venv — **must be done inside the container**, not on the bastion. The bastion runs Python 3.13; the webservice runs 3.11. Running pip from the bastion corrupts the venv.
+Open a webservice shell to create the venv — **must be done inside the container**, not on the bastion. Bastion and webservice both run Python 3.13. Never run pip from the bastion against the webservice venv.
 
 ```bash
-toolforge webservice --backend=kubernetes python3.11 shell
+toolforge webservice --backend=kubernetes python3.13 shell
 ```
 
 Inside the shell, create the venv and install packages. Use `get-pip.py` piped directly — `ensurepip` and `python3 -m venv` (without `--without-pip`) hang due to subprocess restrictions in the shell pod:
@@ -190,7 +190,7 @@ Run from your **home directory**:
 
 ```bash
 cd ~
-toolforge webservice --backend=kubernetes python3.11 start
+toolforge webservice --backend=kubernetes python3.13 start
 ```
 
 Check logs:
@@ -214,18 +214,18 @@ bash ~/chatstream-moderate/deploy.sh
 For dependency changes (new packages added to `pyproject.toml`), you must reinstall inside the webservice shell:
 
 ```bash
-toolforge webservice --backend=kubernetes python3.11 shell
+toolforge webservice --backend=kubernetes python3.13 shell
 ~/www/python/venv/bin/python3 -m pip install -e ~/chatstream-moderate
 exit
 cd ~
-toolforge webservice --backend=kubernetes python3.11 restart
+toolforge webservice --backend=kubernetes python3.13 restart
 ```
 
 ### Troubleshooting
 
 **`WARNING: Ignoring invalid distribution ~ip`** — corrupted pip leftover from a failed install. Fix from the bastion:
 ```bash
-rm -rf ~/www/python/venv/lib/python3.11/site-packages/~ip*
+rm -rf ~/www/python/venv/lib/python3.13/site-packages/~ip*
 ```
 
 **OAuth `invalid_scope` error** — the Wikimedia OAuth 2.0 scope must be `basic`, not `openid`. Check `app.py`.
