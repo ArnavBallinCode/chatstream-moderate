@@ -8,9 +8,6 @@ echo "==> Pulling latest changes..."
 cd ~/chatstream-moderate
 git pull
 
-echo "==> Syncing dependencies..."
-~/www/python/venv/bin/python3 -m pip install -e ~/chatstream-moderate
-
 echo "==> Restarting web service..."
 cd ~
 toolforge webservice --backend=kubernetes python3.11 restart
