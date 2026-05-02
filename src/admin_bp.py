@@ -4,7 +4,7 @@ import json
 import uuid
 from datetime import datetime, timezone
 import requests as _http
-from flask import Blueprint, current_app, request, render_template, redirect, url_for, flash, jsonify
+from flask import Blueprint, current_app, abort, request, render_template, redirect, url_for, flash, jsonify
 from src.models import db, Channel, ChannelMember, Blacklist, GlobalBlacklist, Whitelist
 from src.auth import superadmin_required, channel_role_required, verify_csrf, current_centralauth_id, current_wiki_username
 from src.utils import generate_token
@@ -59,10 +59,7 @@ def channels_create():
 @admin_bp.get('/admin/channels/<channel_id>/edit')
 @superadmin_required
 def channel_edit(channel_id: str):
-    channel    = Channel.query.get_or_404(channel_id)
-    admins     = ChannelMember.query.filter_by(channel_id=channel_id, role='admin').all()
-    superadmins = current_app.config.get('SUPERADMIN_USERS', [])
-    return render_template('admin/channel_edit.html', channel=channel, admins=admins, superadmins=superadmins)
+    return redirect(url_for('admin.channel_settings', channel_id=channel_id))
 
 
 @admin_bp.post('/admin/channels/<channel_id>/edit')
@@ -89,34 +86,44 @@ def channel_delete(channel_id: str):
     return redirect(url_for('admin.channels'))
 
 
-@admin_bp.post('/admin/channels/<channel_id>/admins/add')
-@superadmin_required
-def channel_admin_add(channel_id: str):
+@admin_bp.post('/channel/<channel_id>/members/add')
+@channel_role_required('admin')
+def member_add(channel_id: str):
     verify_csrf()
+    from src.auth import is_superadmin
     Channel.query.get_or_404(channel_id)
     username = request.form.get('wiki_username', '').strip()
     caid     = request.form.get('centralauth_id', '').strip()
-    if not username or not caid:
-        flash('Username and centralauth ID are required.')
-        return redirect(url_for('admin.channel_edit', channel_id=channel_id))
+    role     = request.form.get('role', '').strip()
+    if role not in ('admin', 'moderator') or not username or not caid:
+        flash('Invalid request.')
+        return redirect(url_for('admin.channel_settings', channel_id=channel_id))
+    if role == 'admin' and not is_superadmin():
+        abort(403)
     existing = ChannelMember.query.filter_by(channel_id=channel_id, centralauth_id=int(caid)).first()
     if existing:
-        existing.role = 'admin'; existing.wiki_username = username
+        existing.role = role; existing.wiki_username = username
     else:
         db.session.add(ChannelMember(channel_id=channel_id, centralauth_id=int(caid),
-                                     wiki_username=username, role='admin'))
+                                     wiki_username=username, role=role))
     db.session.commit()
-    return redirect(url_for('admin.channel_edit', channel_id=channel_id))
+    return redirect(url_for('admin.channel_settings', channel_id=channel_id))
 
 
-@admin_bp.post('/admin/channels/<channel_id>/admins/remove')
-@superadmin_required
-def channel_admin_remove(channel_id: str):
+@admin_bp.post('/channel/<channel_id>/members/remove')
+@channel_role_required('admin')
+def member_remove(channel_id: str):
     verify_csrf()
-    caid = request.form.get('centralauth_id', '')
-    ChannelMember.query.filter_by(channel_id=channel_id, centralauth_id=int(caid), role='admin').delete()
+    from src.auth import is_superadmin
+    caid = request.form.get('centralauth_id', '').strip()
+    role = request.form.get('role', '').strip()
+    if not caid or role not in ('admin', 'moderator'):
+        return redirect(url_for('admin.channel_settings', channel_id=channel_id))
+    if role == 'admin' and not is_superadmin():
+        abort(403)
+    ChannelMember.query.filter_by(channel_id=channel_id, centralauth_id=int(caid), role=role).delete()
     db.session.commit()
-    return redirect(url_for('admin.channel_edit', channel_id=channel_id))
+    return redirect(url_for('admin.channel_settings', channel_id=channel_id))
 
 
 @admin_bp.post('/admin/simulation/activate')
@@ -208,10 +215,12 @@ def global_blacklist_remove():
 @admin_bp.get('/channel/<channel_id>/settings')
 @channel_role_required('admin')
 def channel_settings(channel_id: str):
-    channel = Channel.query.get_or_404(channel_id)
-    moderators = ChannelMember.query.filter_by(channel_id=channel_id, role='moderator').all()
+    channel     = Channel.query.get_or_404(channel_id)
+    admins      = ChannelMember.query.filter_by(channel_id=channel_id, role='admin').all()
+    moderators  = ChannelMember.query.filter_by(channel_id=channel_id, role='moderator').all()
     superadmins = current_app.config.get('SUPERADMIN_USERS', [])
-    return render_template('admin/channel_settings.html', channel=channel, moderators=moderators, superadmins=superadmins)
+    return render_template('admin/channel_settings.html', channel=channel,
+                           admins=admins, moderators=moderators, superadmins=superadmins)
 
 
 @admin_bp.post('/channel/<channel_id>/settings')
@@ -265,35 +274,6 @@ def channel_token_regenerate(channel_id: str):
     flash('Display token regenerated.')
     return redirect(url_for('admin.channel_settings', channel_id=channel_id))
 
-
-@admin_bp.post('/channel/<channel_id>/moderators/add')
-@channel_role_required('admin')
-def moderator_add(channel_id: str):
-    verify_csrf()
-    Channel.query.get_or_404(channel_id)
-    username = request.form.get('wiki_username', '').strip()
-    caid     = request.form.get('centralauth_id', '').strip()
-    if not username or not caid:
-        flash('Username and centralauth ID are required.')
-        return redirect(url_for('admin.channel_settings', channel_id=channel_id))
-    existing = ChannelMember.query.filter_by(channel_id=channel_id, centralauth_id=int(caid)).first()
-    if existing:
-        existing.role = 'moderator'; existing.wiki_username = username
-    else:
-        db.session.add(ChannelMember(channel_id=channel_id, centralauth_id=int(caid),
-                                     wiki_username=username, role='moderator'))
-    db.session.commit()
-    return redirect(url_for('admin.channel_settings', channel_id=channel_id))
-
-
-@admin_bp.post('/channel/<channel_id>/moderators/remove')
-@channel_role_required('admin')
-def moderator_remove(channel_id: str):
-    verify_csrf()
-    caid = request.form.get('centralauth_id', '')
-    ChannelMember.query.filter_by(channel_id=channel_id, centralauth_id=int(caid), role='moderator').delete()
-    db.session.commit()
-    return redirect(url_for('admin.channel_settings', channel_id=channel_id))
 
 
 @admin_bp.get('/channel/<channel_id>/blacklist')

@@ -8,7 +8,41 @@
 
 <div class="two-col">
   <div class="card">
-    <h2>Channel settings</h2>
+
+    {% if is_superadmin %}
+    <h2>Channel</h2>
+    <form method="post" action="{{ url_for('admin.channel_edit_post', channel_id=channel.id) }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <div class="form-row">
+        <label>Name</label>
+        <input type="text" name="name" value="{{ channel.name | e }}" required class="form-input">
+      </div>
+      <div class="form-row">
+        <label>Description</label>
+        <input type="text" name="description" value="{{ channel.description or '' | e }}" class="form-input">
+      </div>
+      <div class="form-row checkbox-row">
+        <label><input type="checkbox" name="is_active" {% if channel.is_active %}checked{% endif %}> Active</label>
+      </div>
+      <div class="form-row">
+        <label>Custom CSS</label>
+        <textarea name="custom_css" class="form-input form-textarea" placeholder="/* injected into display pages */">{{ channel.custom_css or '' }}</textarea>
+      </div>
+      <button type="submit" class="btn btn-primary">Save</button>
+    </form>
+
+    <hr>
+    <h3>Webhook</h3>
+    <div class="form-row">
+      <label>HMAC secret</label>
+      <code class="secret-display">{{ channel.webhook_hmac_secret }}</code>
+    </div>
+    <p class="text-muted small">Send as <code>X-Eventyay-Signature: sha256=&lt;HMAC-SHA256(body, secret)&gt;</code></p>
+
+    <hr>
+    {% endif %}
+
+    <h2>Moderation</h2>
     <form method="post" action="{{ url_for('admin.channel_settings_post', channel_id=channel.id) }}">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <div class="form-row checkbox-row">
@@ -54,11 +88,35 @@
     <h3>RSS feeds</h3>
     <p><a href="{{ url_for('display.rss_all', channel_id=channel.id) }}" target="_blank">All approved messages</a></p>
     <p><a href="{{ url_for('display.rss_highlights', channel_id=channel.id) }}" target="_blank">Highlights only</a></p>
+
+    {% if is_superadmin %}
+    <hr>
+    <h3>Danger zone</h3>
+    {% if channel.archived_at %}
+      <p class="text-muted small">Archived {{ channel.archived_at.strftime('%Y-%m-%d %H:%M') }} UTC.</p>
+      <form method="post" action="{{ url_for('admin.channel_unarchive', channel_id=channel.id) }}" class="inline-form" style="margin-bottom:.5rem">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <button type="submit" class="btn btn-ghost">Reopen channel</button>
+      </form>
+    {% else %}
+      <form method="post" action="{{ url_for('admin.channel_archive', channel_id=channel.id) }}" class="inline-form" style="margin-bottom:.5rem"
+            onsubmit="return confirm('Archive {{ channel.name | e }}? No new messages will be accepted.')">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <button type="submit" class="btn btn-warning">Archive channel</button>
+      </form>
+    {% endif %}
+    <form method="post" action="{{ url_for('admin.channel_delete', channel_id=channel.id) }}"
+          onsubmit="return confirm('Delete channel {{ channel.name | e }}? This cannot be undone.')">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <button type="submit" class="btn btn-danger">Delete channel</button>
+    </form>
+    {% endif %}
+
   </div>
 
   <div class="card">
-    <h2>Moderators</h2>
-    <form method="post" action="{{ url_for('admin.moderator_add', channel_id=channel.id) }}">
+    <h2>Team</h2>
+    <form method="post" action="{{ url_for('admin.member_add', channel_id=channel.id) }}">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <div class="form-row">
         <label>Wikimedia username</label>
@@ -69,31 +127,58 @@
           <input type="hidden" name="centralauth_id">
         </div>
       </div>
-      <button type="submit" class="btn btn-primary" disabled>Add moderator</button>
+      <div class="form-row">
+        <label>Role</label>
+        <select name="role" class="form-input form-input-sm">
+          {% if is_superadmin %}<option value="admin">Admin</option>{% endif %}
+          <option value="moderator">Moderator</option>
+        </select>
+      </div>
+      <button type="submit" class="btn btn-primary" disabled>Add</button>
     </form>
+
     <table class="table" style="margin-top:1rem">
-      <thead><tr><th>Username</th><th>CentralAuth ID</th><th></th></tr></thead>
+      <thead><tr><th>Username</th><th>Role</th><th></th></tr></thead>
       <tbody>
+      {% for m in admins %}
+      <tr>
+        <td>{{ m.wiki_username }}</td>
+        <td>Admin</td>
+        <td>
+          {% if is_superadmin %}
+          <form method="post" action="{{ url_for('admin.member_remove', channel_id=channel.id) }}" class="inline-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <input type="hidden" name="centralauth_id" value="{{ m.centralauth_id }}">
+            <input type="hidden" name="role" value="admin">
+            <button type="submit" class="btn btn-sm btn-danger-ghost">Remove</button>
+          </form>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
       {% for m in moderators %}
       <tr>
         <td>{{ m.wiki_username }}</td>
-        <td>{{ m.centralauth_id }}</td>
+        <td>Moderator</td>
         <td>
-          <form method="post" action="{{ url_for('admin.moderator_remove', channel_id=channel.id) }}" class="inline-form">
+          <form method="post" action="{{ url_for('admin.member_remove', channel_id=channel.id) }}" class="inline-form">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
             <input type="hidden" name="centralauth_id" value="{{ m.centralauth_id }}">
+            <input type="hidden" name="role" value="moderator">
             <button type="submit" class="btn btn-sm btn-danger-ghost">Remove</button>
           </form>
         </td>
       </tr>
       {% else %}
-      <tr><td colspan="3" class="text-muted">No moderators assigned.</td></tr>
+      {% if not admins %}
+      <tr><td colspan="3" class="text-muted">No team members assigned.</td></tr>
+      {% endif %}
       {% endfor %}
       {% for name in superadmins %}
       <tr class="superadmin-row">
         <td>{{ name }}</td>
-        <td class="text-muted">—</td>
-        <td><span class="text-muted small">superadmin</span></td>
+        <td>Superadmin</td>
+        <td></td>
       </tr>
       {% endfor %}
       </tbody>
