@@ -20,7 +20,7 @@ Incoming chat messages are held in a moderation queue. Moderators approve, rejec
 ### Prerequisites
 
 - [UV](https://docs.astral.sh/uv/) for Python dependency management
-- Python 3.11
+- Python 3.11+ (3.13 recommended; matches Toolforge webservice)
 
 ### Setup
 
