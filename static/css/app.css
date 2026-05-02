@@ -380,7 +380,7 @@ input[type="checkbox"] {
 /* ── Queue ───────────────────────────────────────────────────────────────── */
 
 /* Sticky focus bar — sits directly below the sticky header */
-.queue-focus-bar {
+.queue-channel-bar {
   position: sticky;
   top: 52px;          /* exactly the header height */
   z-index: 90;
@@ -395,19 +395,29 @@ input[type="checkbox"] {
   gap: .75rem;
 }
 
-.queue-focus-bar .percentile-label {
+.queue-channel-bar .percentile-label {
   font-size: 12px;
   color: var(--muted);
   white-space: nowrap;
   flex-shrink: 0;
 }
 
-.queue-focus-bar .percentile-slider {
+.queue-channel-bar .percentile-slider {
   width: 160px;
   accent-color: var(--accent);
   cursor: pointer;
   flex-shrink: 0;
 }
+
+.channel-bar-links {
+  margin-left: auto;
+  display: flex;
+  gap: .2rem;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.btn-xs { padding: .15rem .45rem; font-size: 11px; }
 
 .queue-stats {
   font-size: 12px;

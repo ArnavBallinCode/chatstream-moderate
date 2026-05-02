@@ -3,27 +3,22 @@
 {% block content %}
 <div class="page-header">
   <h1>{{ channel.name }} <span class="page-subtitle">Moderation Queue</span></h1>
+  {% if channel_role == 'admin' %}
   <div class="page-header-actions">
-    <a href="{{ url_for('queue.channel_log', channel_id=channel.id) }}" class="btn btn-ghost">Log</a>
-    <a href="{{ url_for('admin.channel_blacklist', channel_id=channel.id) }}" class="btn btn-ghost">Blacklist</a>
-    <a href="{{ url_for('admin.channel_whitelist', channel_id=channel.id) }}" class="btn btn-ghost">Whitelist</a>
-    {% if channel_role == 'admin' %}
-      <a href="{{ url_for('admin.channel_settings', channel_id=channel.id) }}" class="btn btn-ghost">Languages &amp; Settings</a>
-      {% if channel.archived_at %}
-        <form method="post" action="{{ url_for('admin.channel_unarchive', channel_id=channel.id) }}" class="inline-form">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-          <button type="submit" class="btn btn-ghost">Reopen channel</button>
-        </form>
-      {% else %}
-        <form method="post" action="{{ url_for('admin.channel_archive', channel_id=channel.id) }}" class="inline-form"
-              onsubmit="return confirm('Archive {{ channel.name | e }}? This stops accepting new messages.')">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-          <button type="submit" class="btn btn-ghost" style="color:var(--muted)">Archive channel</button>
-        </form>
-      {% endif %}
+    {% if channel.archived_at %}
+      <form method="post" action="{{ url_for('admin.channel_unarchive', channel_id=channel.id) }}" class="inline-form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <button type="submit" class="btn btn-ghost">Reopen channel</button>
+      </form>
+    {% else %}
+      <form method="post" action="{{ url_for('admin.channel_archive', channel_id=channel.id) }}" class="inline-form"
+            onsubmit="return confirm('Archive {{ channel.name | e }}? This stops accepting new messages.')">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <button type="submit" class="btn btn-ghost" style="color:var(--muted)">Archive channel</button>
+      </form>
     {% endif %}
-    <a href="{{ url_for('display.rss_all', channel_id=channel.id) }}" class="btn btn-ghost">RSS</a>
   </div>
+  {% endif %}
 </div>
 
 {% if channel.archived_at %}
@@ -33,8 +28,8 @@
 {% endif %}
 
 <!--
-  Sticky focus bar
-  ────────────────
+  Sticky channel bar
+  ──────────────────
   Percentile P (0–100): the message at index round(P/100 × (N−1)) in the
   newest-first list is centred in the viewport.
     P=0   → newest (top of list, scroll to top)
@@ -42,7 +37,7 @@
     P=100 → oldest message centred (or as close as scroll range allows)
   Two moderators at different values naturally cover different age-bands.
 -->
-<div class="queue-focus-bar">
+<div class="queue-channel-bar">
   <label class="percentile-label">Focus: <strong id="percentile-value-label">Latest</strong></label>
   <input type="range" id="percentile-slider" min="0" max="100" value="0" step="1"
          class="percentile-slider">
@@ -50,6 +45,15 @@
     <button class="type-chip active" data-type="all">All</button>
     <button class="type-chip" data-type="text">Text</button>
     <button class="type-chip" data-type="emoji">Emoji</button>
+  </div>
+  <div class="channel-bar-links">
+    <a href="{{ url_for('queue.channel_log', channel_id=channel.id) }}" class="btn btn-ghost btn-xs">Log</a>
+    <a href="{{ url_for('admin.channel_blacklist', channel_id=channel.id) }}" class="btn btn-ghost btn-xs">Blacklist</a>
+    <a href="{{ url_for('admin.channel_whitelist', channel_id=channel.id) }}" class="btn btn-ghost btn-xs">Whitelist</a>
+    {% if channel_role == 'admin' %}
+      <a href="{{ url_for('admin.channel_settings', channel_id=channel.id) }}" class="btn btn-ghost btn-xs">Settings</a>
+    {% endif %}
+    <a href="{{ url_for('display.rss_all', channel_id=channel.id) }}" class="btn btn-ghost btn-xs">RSS</a>
   </div>
 </div>
 
