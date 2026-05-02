@@ -249,7 +249,7 @@ def channel_archive(channel_id: str):
     verify_csrf()
     ch = Channel.query.get_or_404(channel_id)
     ch.is_active  = False
-    ch.archived_at = datetime.utcnow()
+    ch.archived_at = datetime.now(timezone.utc)
     db.session.commit()
     flash(f'"{ch.name}" archived. No new messages will be accepted.')
     return redirect(url_for('queue.queue_page', channel_id=channel_id))

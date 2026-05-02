@@ -11,7 +11,7 @@
 // on the container enables current-role detection.
 
 (function () {
-  const MW_API = 'https://en.wikipedia.org/w/api.php';
+  const MW_API = 'https://meta.wikimedia.org/w/api.php';
 
   async function fetchSuggestions(prefix) {
     const url = `${MW_API}?action=query&list=allusers&auprefix=${encodeURIComponent(prefix)}&aulimit=8&format=json&origin=*`;
