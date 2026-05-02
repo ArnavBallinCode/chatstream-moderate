@@ -97,8 +97,9 @@ const CSRF_TOKEN  = {{ csrf_token | tojson }};
 const cardMap     = new Map();   // message id (number) → card DOM element
 let   langFilter  = [];
 let   typeFilter  = 'all';       // 'all' | 'text' | 'emoji'
-let   pendingScroll = false;     // set when content changes; triggers scroll reanchor
-let   selectedId  = null;        // currently keyboard-armed card id
+let   pendingScroll    = false;   // set when content changes; triggers scroll reanchor
+let   selectedId       = null;   // currently keyboard-armed card id
+let   suppressCompensation = 0;  // timestamp until which scroll compensation is suppressed
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 function esc(str) {
@@ -341,7 +342,8 @@ function updateQueue(messages, langCodes) {
 
   // 4. Compensate scroll to keep selected card at same screen position
   //    (new cards prepended above push it down — undo that shift instantly).
-  if (selTopBefore !== null && selCard && document.contains(selCard)) {
+  //    Suppressed briefly after auto-select to avoid interrupting smooth scroll.
+  if (selTopBefore !== null && selCard && document.contains(selCard) && Date.now() > suppressCompensation) {
     const delta = selCard.getBoundingClientRect().top - selTopBefore;
     if (Math.abs(delta) > 0.5) window.scrollBy({ top: delta, behavior: 'instant' });
   }
@@ -438,6 +440,7 @@ function autoSelectAtPercentile() {
   const idx = Math.round(p * (cards.length - 1));
   selectCard(parseInt(cards[idx].dataset.id));
   scrollToPercentile(p, /* smooth= */ true);
+  suppressCompensation = Date.now() + 700;  // let smooth scroll finish before compensating
 }
 
 // ── Stats bar ──────────────────────────────────────────────────────────────
