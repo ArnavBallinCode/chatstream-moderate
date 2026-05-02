@@ -68,13 +68,14 @@
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <div class="form-row">
         <label>Wikimedia username</label>
-        <input type="text" name="wiki_username" required class="form-input">
+        <div class="user-picker">
+          <input type="text" class="form-input user-picker-input" placeholder="Start typing a username…" autocomplete="off">
+          <ul class="user-picker-suggestions hidden"></ul>
+          <input type="hidden" name="wiki_username">
+          <input type="hidden" name="centralauth_id">
+        </div>
       </div>
-      <div class="form-row">
-        <label>CentralAuth ID</label>
-        <input type="number" name="centralauth_id" required class="form-input">
-      </div>
-      <button type="submit" class="btn btn-primary">Add admin</button>
+      <button type="submit" class="btn btn-primary" disabled>Add admin</button>
     </form>
     <table class="table" style="margin-top:1rem">
       <thead><tr><th>Username</th><th>CentralAuth ID</th><th></th></tr></thead>
