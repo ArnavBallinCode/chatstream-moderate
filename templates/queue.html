@@ -107,13 +107,20 @@ function esc(str) {
   return d.innerHTML;
 }
 
-async function apiPost(url, body) {
-  await fetch(url, {
+function apiPost(url, body) {
+  fetch(url, {
     method:  'POST',
     headers: { 'X-CSRF-Token': CSRF_TOKEN, 'Content-Type': 'application/x-www-form-urlencoded' },
     body:    new URLSearchParams(body),
   });
-  poll();
+}
+
+function dismissCard(msgId) {
+  const card = cardMap.get(msgId);
+  if (!card) return;
+  if (selectedId === msgId) selectCard(null);
+  card.classList.add('msg-leaving');
+  setTimeout(() => { card.remove(); cardMap.delete(msgId); }, 280);
 }
 
 // ── Card selection + keyboard shortcuts ───────────────────────────────────
@@ -133,7 +140,7 @@ document.addEventListener('keydown', e => {
   if (idx === undefined || selectedId === null) return;
   const card = cardMap.get(selectedId);
   if (!card) { selectCard(null); return; }
-  const btns = card.querySelectorAll('.msg-actions .btn');
+  const btns = [...card.querySelectorAll('.msg-actions .btn'), ...card.querySelectorAll('.msg-user-actions .btn')];
   if (btns[idx]) { btns[idx].click(); selectCard(null); }
 });
 
@@ -241,6 +248,7 @@ function makeCard(msg) {
     btn.appendChild(document.createTextNode(label));
     btn.addEventListener('click', e => {
       e.stopPropagation();
+      dismissCard(msg.id);
       apiPost(`/api/channel/${CHANNEL_ID}/message/${msg.id}/${ep}`, {});
     });
     actions.appendChild(btn);
@@ -261,6 +269,7 @@ function makeCard(msg) {
   ban.appendChild(document.createTextNode('Ban'));
   ban.addEventListener('click', e => {
     e.stopPropagation();
+    dismissCard(msg.id);
     apiPost(`/api/channel/${CHANNEL_ID}/block-user`, userBody);
   });
   userActions.appendChild(ban);
@@ -272,6 +281,7 @@ function makeCard(msg) {
   allow.appendChild(document.createTextNode('Allow'));
   allow.addEventListener('click', e => {
     e.stopPropagation();
+    dismissCard(msg.id);
     apiPost(`/api/channel/${CHANNEL_ID}/whitelist-user`, userBody);
   });
   userActions.appendChild(allow);
