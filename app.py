@@ -54,6 +54,8 @@ def create_app(test_config: dict | None = None) -> Flask:
         SESSION_TYPE                  = 'sqlalchemy',
         SESSION_SQLALCHEMY            = db,
         SESSION_PERMANENT             = False,
+        SESSION_COOKIE_HTTPONLY       = True,
+        SESSION_COOKIE_SAMESITE       = 'Lax',
         SUPERADMIN_USERS              = SUPERADMIN_USERS,
         OAUTH_CLIENT_ID               = _read_secret('oauth-client-id'),
         OAUTH_CLIENT_SECRET           = _read_secret('oauth-client-secret'),
@@ -63,6 +65,9 @@ def create_app(test_config: dict | None = None) -> Flask:
     )
     if test_config:
         app.config.update(test_config)
+
+    if not app.debug:
+        app.config['SESSION_COOKIE_SECURE'] = True
 
     db.init_app(app)
     Migrate(app, db)

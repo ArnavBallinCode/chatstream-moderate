@@ -109,7 +109,7 @@ Auth decorators live in `src/auth.py`:
 
 **Most-restrictive-wins** (`queue_bp.py:_set_status`):  
 `DECISION_RANK = {highlighted: 1, approved: 2, rejected: 3}`  
-A message status can only move to a higher rank, never lower. Returns `{superseded: True}` if ignored.
+Lower rank number = higher priority. A status can only move to a *lower* rank number, never higher. Returns `{superseded: True}` if ignored.
 
 **Blacklist/whitelist dedup** (application-level, not DB constraint):  
 Check by `sender_id` first when present, else by `screen_name`.  
@@ -120,7 +120,8 @@ The unique DB index is on `(channel_id, sender_id)` — NULLs are allowed multip
 
 **Simulation uses loopback HTTP** (`admin_bp.py:simulation_inject`):  
 `requests.post(request.host_url + '/webhook/channel/simulation', ...)`.  
-Do NOT use `test_client()` — it shares the SQLAlchemy session and causes teardown corruption.
+Do NOT use `test_client()` — it shares the SQLAlchemy session and causes teardown corruption.  
+On Toolforge the call goes through the public ingress (round-trip), which is fine — HMAC auth still applies.
 
 **`db.create_all()` runs on every startup** (`app.py:create_app`):  
 New tables are created automatically. Schema changes that alter existing tables require a Flask-Migrate migration (`flask db migrate && flask db upgrade`).
@@ -174,6 +175,12 @@ New tables are created automatically. Schema changes that alter existing tables 
 
 **Change who can do X**:
 - Swap `@superadmin_required` ↔ `@channel_role_required('admin')` ↔ `@channel_role_required('admin', 'moderator')`
+
+---
+
+## Input sanitization
+
+`nh3` (Rust-backed HTML sanitizer) is a dependency — used to strip unsafe HTML from user-supplied content before storage/display. If adding new fields that render user input, pass them through `nh3.clean()`.
 
 ---
 
