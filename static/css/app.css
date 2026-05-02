@@ -559,6 +559,14 @@ input[type="checkbox"] {
 
 .msg-time { font-size: 11px; }
 
+.msg-user-actions {
+  margin-left: auto;
+  display: flex;
+  gap: .3rem;
+  align-items: center;
+  flex-shrink: 0;
+}
+
 .msg-text {
   font-size: 14px;
   /* Both break-word and overflow-wrap cover long unbreakable strings (URLs, etc.)

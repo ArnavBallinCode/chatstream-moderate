@@ -246,8 +246,12 @@ function makeCard(msg) {
   if (msg.sender_id)      userBody.sender_id      = msg.sender_id;
   if (msg.centralauth_id) userBody.centralauth_id = String(msg.centralauth_id);
 
+  // User-level actions — Ban and Allow — sit in the meta row, top-right
+  const userActions = document.createElement('div');
+  userActions.className = 'msg-user-actions';
+
   const ban = document.createElement('button');
-  ban.className = 'btn btn-ban';
+  ban.className = 'btn btn-ban btn-sm';
   ban.title     = 'Ban user from this channel — rejects all their queued messages (key 5)';
   ban.appendChild(hint('5'));
   ban.appendChild(document.createTextNode('Ban'));
@@ -255,10 +259,10 @@ function makeCard(msg) {
     e.stopPropagation();
     apiPost(`/api/channel/${CHANNEL_ID}/block-user`, userBody);
   });
-  actions.appendChild(ban);
+  userActions.appendChild(ban);
 
   const allow = document.createElement('button');
-  allow.className = 'btn btn-whitelist';
+  allow.className = 'btn btn-whitelist btn-sm';
   allow.title     = 'Whitelist user — future messages auto-approved (key 6)';
   allow.appendChild(hint('6'));
   allow.appendChild(document.createTextNode('Allow'));
@@ -266,7 +270,9 @@ function makeCard(msg) {
     e.stopPropagation();
     apiPost(`/api/channel/${CHANNEL_ID}/whitelist-user`, userBody);
   });
-  actions.appendChild(allow);
+  userActions.appendChild(allow);
+
+  meta.appendChild(userActions);
 
   body.appendChild(actions);
   card.appendChild(body);
