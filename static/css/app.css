@@ -580,7 +580,7 @@ input[type="checkbox"] {
 
 /* Keyboard shortcut badge — hidden by default, shown on selected card */
 .key-hint {
-  display: none;
+  visibility: hidden;
   font-size: 9px;
   font-weight: 700;
   opacity: .7;
@@ -590,7 +590,7 @@ input[type="checkbox"] {
 }
 
 .msg-card.selected .key-hint {
-  display: inline;
+  visibility: visible;
 }
 
 .msg-block-form {
