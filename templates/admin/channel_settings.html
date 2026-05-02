@@ -120,7 +120,7 @@
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <div class="form-row">
         <label>Wikimedia username</label>
-        <div class="user-picker" data-members="{{ members_by_caid | tojson | e }}">
+        <div class="user-picker" data-members='{{ members_by_caid | tojson }}'>
           <input type="text" class="form-input user-picker-input" placeholder="Start typing a username…" autocomplete="off">
           <ul class="user-picker-suggestions hidden"></ul>
           <input type="hidden" name="wiki_username">
