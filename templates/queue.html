@@ -46,17 +46,17 @@
   <label class="percentile-label">Focus: <strong id="percentile-value-label">Latest</strong></label>
   <input type="range" id="percentile-slider" min="0" max="100" value="0" step="1"
          class="percentile-slider">
+  <div class="type-filter">
+    <button class="type-chip active" data-type="all">All</button>
+    <button class="type-chip" data-type="text">Text</button>
+    <button class="type-chip" data-type="emoji">Emoji</button>
+  </div>
 </div>
 
 <div class="queue-stats" id="queue-stats"></div>
 
 <div class="queue-toolbar">
   <span id="queue-count" class="queue-count"></span>
-  <div class="type-filter">
-    <button class="type-chip active" data-type="all">All</button>
-    <button class="type-chip" data-type="text">Text</button>
-    <button class="type-chip" data-type="emoji">Emoji</button>
-  </div>
   <div id="lang-chips" class="lang-chips"></div>
 </div>
 
