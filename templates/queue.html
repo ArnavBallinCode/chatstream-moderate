@@ -383,44 +383,7 @@ function renderLangChips(codes) {
   }
 }
 
-// ── Percentile scroll ──────────────────────────────────────────────────────
-/*
- * scrollToPercentile(p)
- *
- * Scrolls so the card at position round(p × (N−1)) in the newest-first list
- * is vertically centred in the window.  Scroll position is clamped to the
- * valid range [0, maxScroll], so if the target card is near the top or
- * bottom of the page the centring is "as close as possible".
- *
- * p = 0   → newest card (index 0) → scrolls to top
- * p = 0.5 → median card → centred
- * p = 1   → oldest card (index N−1) → centred (or as low as page allows)
- */
-function scrollToPercentile(p, smooth = true) {
-  const cards = Array.from(
-    document.querySelectorAll('#queue-msgs .msg-card:not(.msg-leaving)')
-  );
-  if (!cards.length) return;
-
-  const idx        = Math.round(p * (cards.length - 1));
-  const target     = cards[idx];
-  const rect       = target.getBoundingClientRect();
-  const cardCentreY = rect.top + window.scrollY + rect.height / 2;
-  const wantScroll  = cardCentreY - window.innerHeight / 2;
-  const maxScroll   = document.documentElement.scrollHeight - window.innerHeight;
-
-  window.scrollTo({
-    top:      Math.max(0, Math.min(maxScroll, wantScroll)),
-    behavior: smooth ? 'smooth' : 'instant',
-  });
-}
-
 // ── Auto-focus at percentile ───────────────────────────────────────────────
-/*
- * If the current selectedId is no longer in the queue (dealt with or gone),
- * pick the card at the percentile position and scroll to it.
- * Does nothing if the selected card is still present.
- */
 function autoSelectAtPercentile() {
   if (selectedId !== null && cardMap.has(selectedId)) return;
   const cards = Array.from(
@@ -430,8 +393,7 @@ function autoSelectAtPercentile() {
   const p   = document.getElementById('percentile-slider').value / 100;
   const idx = Math.round(p * (cards.length - 1));
   selectCard(parseInt(cards[idx].dataset.id));
-  scrollToPercentile(p, /* smooth= */ true);
-  suppressCompensation = Date.now() + 700;  // let smooth scroll finish before compensating
+  centerSelected();
 }
 
 // ── Stats bar ──────────────────────────────────────────────────────────────
@@ -481,18 +443,6 @@ renderLangChips({{ configured_languages | tojson }});
 setInterval(poll, 500);
 poll();
 
-// Apply percentile scroll after animations have settled (enter: ~200ms, leave: 280ms).
-// Only fires when there is no selected card (auto-select handles the selected case).
-setInterval(() => {
-  if (pendingScroll) {
-    pendingScroll = false;
-    if (selectedId === null || !cardMap.has(selectedId)) {
-      const p = document.getElementById('percentile-slider').value / 100;
-      scrollToPercentile(p);
-    }
-  }
-}, 320);
-
 // ── Percentile slider ──────────────────────────────────────────────────────
 const slider    = document.getElementById('percentile-slider');
 const pLabel    = document.getElementById('percentile-value-label');
@@ -514,7 +464,8 @@ slider.addEventListener('input', function () {
   const v = parseInt(this.value);
   updatePercentileLabel(v);
   localStorage.setItem(FOCUS_KEY, v);
-  scrollToPercentile(v / 100, false);   // instant while dragging
+  selectedId = null;        // force re-select at new percentile
+  autoSelectAtPercentile();
 });
 
 // ── Simulation panel ───────────────────────────────────────────────────────
