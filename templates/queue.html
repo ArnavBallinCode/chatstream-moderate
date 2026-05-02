@@ -513,12 +513,11 @@ function updatePercentileLabel(v) {
   else                pLabel.textContent = v + 'th percentile';
 }
 
-// Restore saved percentile
-const savedFocus = localStorage.getItem(FOCUS_KEY);
-if (savedFocus !== null) {
-  slider.value = savedFocus;
-  updatePercentileLabel(parseInt(savedFocus));
-}
+// Restore saved percentile, or assign a random one for first visit
+const savedFocus = localStorage.getItem(FOCUS_KEY) ?? String(Math.floor(Math.random() * 101));
+localStorage.setItem(FOCUS_KEY, savedFocus);
+slider.value = savedFocus;
+updatePercentileLabel(parseInt(savedFocus));
 
 slider.addEventListener('input', function () {
   const v = parseInt(this.value);
