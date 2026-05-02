@@ -97,9 +97,7 @@ const CSRF_TOKEN  = {{ csrf_token | tojson }};
 const cardMap     = new Map();   // message id (number) → card DOM element
 let   langFilter  = [];
 let   typeFilter  = 'all';       // 'all' | 'text' | 'emoji'
-let   pendingScroll    = false;   // set when content changes; triggers scroll reanchor
-let   selectedId       = null;   // currently keyboard-armed card id
-let   suppressCompensation = 0;  // timestamp until which scroll compensation is suppressed
+let   selectedId  = null;        // currently keyboard-armed card id
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 function esc(str) {
@@ -294,16 +292,23 @@ function makeCard(msg) {
   return card;
 }
 
+// ── Center selected card in the tile viewport ──────────────────────────────
+function centerSelected() {
+  if (selectedId === null || !cardMap.has(selectedId)) return;
+  const card = cardMap.get(selectedId);
+  if (!document.contains(card)) return;
+  const bar         = document.querySelector('.queue-channel-bar');
+  const topOffset   = bar ? bar.getBoundingClientRect().bottom : 0;
+  const available   = window.innerHeight - topOffset;
+  const cardTop     = card.getBoundingClientRect().top + window.scrollY;
+  const target      = cardTop + card.offsetHeight / 2 - topOffset - available / 2;
+  window.scrollTo({ top: Math.max(0, target), behavior: 'instant' });
+}
+
 // ── Queue diff + render ────────────────────────────────────────────────────
 function updateQueue(messages, langCodes) {
   const container = document.getElementById('queue-msgs');
   const newIds    = new Set(messages.map(m => m.id));
-  let   changed   = false;
-
-  // Capture the selected card's current screen position before any DOM mutations
-  // so we can compensate the scroll and keep it visually stable.
-  const selCard      = selectedId !== null ? cardMap.get(selectedId) : null;
-  const selTopBefore = selCard ? selCard.getBoundingClientRect().top : null;
 
   // 1. Remove cards no longer in queue (slide out)
   for (const [id, card] of cardMap) {
@@ -313,13 +318,10 @@ function updateQueue(messages, langCodes) {
       const c = card;
       setTimeout(() => c.remove(), 280);
       cardMap.delete(id);
-      changed = true;
     }
   }
 
   // 2. Insert new cards at the top, maintaining newest-first order.
-  //    Sort new messages oldest-first so that after successive prepends
-  //    the newest ends up at the very top.
   const incoming = messages
     .filter(m => !cardMap.has(m.id))
     .sort((a, b) => (a.arrived_at < b.arrived_at ? -1 : 1));
@@ -328,25 +330,17 @@ function updateQueue(messages, langCodes) {
     const card = makeCard(msg);
     container.prepend(card);
     cardMap.set(msg.id, card);
-    // Two rAFs: first ensures the entering class is rendered, second removes
-    // it so the CSS transition plays from the initial to the settled state.
     requestAnimationFrame(() =>
       requestAnimationFrame(() => card.classList.remove('msg-entering'))
     );
-    changed = true;
   }
 
   // 3. Remove loading placeholder once we have real data
   const placeholder = container.querySelector('.queue-loading');
   if (placeholder) placeholder.remove();
 
-  // 4. Compensate scroll to keep selected card at same screen position
-  //    (new cards prepended above push it down — undo that shift instantly).
-  //    Suppressed briefly after auto-select to avoid interrupting smooth scroll.
-  if (selTopBefore !== null && selCard && document.contains(selCard) && Date.now() > suppressCompensation) {
-    const delta = selCard.getBoundingClientRect().top - selTopBefore;
-    if (Math.abs(delta) > 0.5) window.scrollBy({ top: delta, behavior: 'instant' });
-  }
+  // 4. Keep selected card centered (new cards prepending would push it down)
+  centerSelected();
 
   // 5. Count
   const countEl = document.getElementById('queue-count');
@@ -358,9 +352,6 @@ function updateQueue(messages, langCodes) {
 
   // 6. Lang chips
   renderLangChips(langCodes);
-
-  // 7. If no card is selected, re-anchor scroll to percentile after animations settle
-  if (changed && selCard === null) pendingScroll = true;
 }
 
 // ── Language filter chips ──────────────────────────────────────────────────
