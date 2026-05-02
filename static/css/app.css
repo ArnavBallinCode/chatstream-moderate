@@ -750,6 +750,8 @@ code {
 
 h1, h2, h3, h4 { color: var(--text); }
 
+tr.superadmin-row td { color: var(--muted); }
+
 /* ── Wikimedia username picker ──────────────────────────────────────────── */
 .user-picker {
   position: relative;

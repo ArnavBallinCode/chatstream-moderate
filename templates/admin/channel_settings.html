@@ -89,6 +89,13 @@
       {% else %}
       <tr><td colspan="3" class="text-muted">No moderators assigned.</td></tr>
       {% endfor %}
+      {% for name in superadmins %}
+      <tr class="superadmin-row">
+        <td>{{ name }}</td>
+        <td class="text-muted">—</td>
+        <td><span class="text-muted small">superadmin</span></td>
+      </tr>
+      {% endfor %}
       </tbody>
     </table>
   </div>

@@ -4,7 +4,7 @@ import json
 import uuid
 from datetime import datetime, timezone
 import requests as _http
-from flask import Blueprint, request, render_template, redirect, url_for, flash, jsonify
+from flask import Blueprint, current_app, request, render_template, redirect, url_for, flash, jsonify
 from src.models import db, Channel, ChannelMember, Blacklist, GlobalBlacklist, Whitelist
 from src.auth import superadmin_required, channel_role_required, verify_csrf, current_centralauth_id, current_wiki_username
 from src.utils import generate_token
@@ -59,9 +59,10 @@ def channels_create():
 @admin_bp.get('/admin/channels/<channel_id>/edit')
 @superadmin_required
 def channel_edit(channel_id: str):
-    channel = Channel.query.get_or_404(channel_id)
-    admins  = ChannelMember.query.filter_by(channel_id=channel_id, role='admin').all()
-    return render_template('admin/channel_edit.html', channel=channel, admins=admins)
+    channel    = Channel.query.get_or_404(channel_id)
+    admins     = ChannelMember.query.filter_by(channel_id=channel_id, role='admin').all()
+    superadmins = current_app.config.get('SUPERADMIN_USERS', [])
+    return render_template('admin/channel_edit.html', channel=channel, admins=admins, superadmins=superadmins)
 
 
 @admin_bp.post('/admin/channels/<channel_id>/edit')
@@ -209,7 +210,8 @@ def global_blacklist_remove():
 def channel_settings(channel_id: str):
     channel = Channel.query.get_or_404(channel_id)
     moderators = ChannelMember.query.filter_by(channel_id=channel_id, role='moderator').all()
-    return render_template('admin/channel_settings.html', channel=channel, moderators=moderators)
+    superadmins = current_app.config.get('SUPERADMIN_USERS', [])
+    return render_template('admin/channel_settings.html', channel=channel, moderators=moderators, superadmins=superadmins)
 
 
 @admin_bp.post('/channel/<channel_id>/settings')
