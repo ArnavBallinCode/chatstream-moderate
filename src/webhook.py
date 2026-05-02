@@ -122,6 +122,9 @@ def _detect_language(channel: Channel, text: str, user_language: str | None) -> 
         return user_language or channel.default_language
     try:
         from lingua import LanguageDetectorBuilder, Language  # type: ignore[import]
+    except ImportError:
+        return user_language or channel.default_language
+    try:
         likely = parse_likely_languages(channel.likely_languages)
         langs = [Language[c.upper()] for c in likely if hasattr(Language, c.upper())] or list(Language)
         detector = LanguageDetectorBuilder.from_languages(*langs).build()
