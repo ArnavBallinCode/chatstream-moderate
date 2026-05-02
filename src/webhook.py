@@ -148,6 +148,10 @@ def _process_message(channel: Channel, data: dict) -> None:
     message_type = data.get('message_type', 'text')
     eventyay_id  = data.get('message_id')
 
+    # Emoji "remove" reactions are audience engagement signals, not content to moderate
+    if message_type == 'emoji' and (data.get('meta') or {}).get('action') == 'remove':
+        return
+
     if eventyay_id and Message.query.filter_by(
         channel_id=channel.id, eventyay_message_id=eventyay_id
     ).first():

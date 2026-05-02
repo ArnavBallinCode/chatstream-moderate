@@ -52,6 +52,11 @@
 
 <div class="queue-toolbar">
   <span id="queue-count" class="queue-count"></span>
+  <div class="type-filter">
+    <button class="type-chip active" data-type="all">All</button>
+    <button class="type-chip" data-type="text">Text</button>
+    <button class="type-chip" data-type="emoji">Emoji</button>
+  </div>
   <div id="lang-chips" class="lang-chips"></div>
 </div>
 
@@ -87,6 +92,7 @@ const CSRF_TOKEN  = {{ csrf_token | tojson }};
 // ── State ──────────────────────────────────────────────────────────────────
 const cardMap     = new Map();   // message id (number) → card DOM element
 let   langFilter  = [];
+let   typeFilter  = 'all';       // 'all' | 'text' | 'emoji'
 let   pendingScroll = false;     // set when content changes; triggers scroll reanchor
 let   selectedId  = null;        // currently keyboard-armed card id
 
@@ -434,6 +440,7 @@ function renderStats(stats) {
 async function poll() {
   const params = new URLSearchParams();
   langFilter.forEach(l => params.append('lang', l));
+  if (typeFilter !== 'all') params.set('type', typeFilter);
   try {
     const r    = await fetch(`/channel/${CHANNEL_ID}/queue/messages.json?${params}`,
                              { headers: { 'X-CSRF-Token': CSRF_TOKEN } });
@@ -443,6 +450,15 @@ async function poll() {
     autoSelectAtPercentile();
   } catch { /* silently ignore transient network errors */ }
 }
+
+// ── Type filter chips ──────────────────────────────────────────────────────
+document.querySelectorAll('.type-chip').forEach(btn => {
+  btn.addEventListener('click', () => {
+    typeFilter = btn.dataset.type;
+    document.querySelectorAll('.type-chip').forEach(b => b.classList.toggle('active', b === btn));
+    poll();
+  });
+});
 
 // Seed chips immediately from server-rendered channel config so they
 // appear before the first poll completes, even when the queue is empty.

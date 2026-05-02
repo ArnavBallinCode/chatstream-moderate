@@ -133,14 +133,15 @@ New tables are created automatically. Schema changes that alter existing tables 
 `webhook.py:_process_message()`:
 
 1. Deduplicate by `eventyay_message_id` — silently skip
-2. Check global blacklist → drop
-3. Check channel blacklist → drop
-4. Check blocked patterns (Levenshtein ≤ 2 on lowercased text) → drop
-5. Check channel whitelist → `status = 'approved'`
-6. Emoji auto-approve (if enabled + identical emoji approved in last 10s) → `status = 'approved'`
-7. Default → `status = 'queued'`
-8. Run language detection (text only, if enabled)
-9. Insert Message row
+2. Skip emoji reactions with `meta.action == "remove"` — not content to moderate
+3. Check global blacklist → drop
+4. Check channel blacklist → drop
+5. Check blocked patterns (Levenshtein ≤ 2 on lowercased text) → drop
+6. Check channel whitelist → `status = 'approved'`
+7. Emoji auto-approve (if enabled + identical emoji approved in last 10s) → `status = 'approved'`
+8. Default → `status = 'queued'`
+9. Run language detection (text only, if enabled)
+10. Insert Message row
 
 ---
 
@@ -148,10 +149,12 @@ New tables are created automatically. Schema changes that alter existing tables 
 
 - Polls `GET /channel/<id>/queue/messages.json` every 500ms
 - Response: `{messages, lang_codes, stats}`
+- Query params: `lang=<code>` (repeatable), `type=text|emoji|qa` (default: all)
 - Stats: all-time decision counts from ModerationLog grouped by decision string
 - New cards prepend (newest at top); removed cards slide out with CSS transition
 - `selectedId` — the keyboard-armed card; keys 1–6 fire actions
   - 1 highlight · 2 approve · 3 reject · 4 reject++ · 5 ban · 6 allow (whitelist)
+- `typeFilter` — 'all' | 'text' | 'emoji'; type filter bar in toolbar switches this and re-polls
 - `autoSelectAtPercentile()` — runs after each poll; selects card at percentile position when nothing is selected
 - Scroll compensation: `selCard.getBoundingClientRect().top` captured before DOM mutations, `window.scrollBy` after
 

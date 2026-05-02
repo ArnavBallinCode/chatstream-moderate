@@ -97,11 +97,14 @@ def queue_messages(channel_id: str):
 def queue_messages_json(channel_id: str):
     channel = Channel.query.get_or_404(channel_id)
     lang_filter = request.args.getlist('lang')
+    type_filter = request.args.get('type', 'all')
     q = (Message.query
          .filter_by(channel_id=channel_id, status='queued')
          .order_by(Message.arrived_at.desc()))
     if lang_filter:
         q = q.filter(Message.detected_language.in_(lang_filter))
+    if type_filter in ('text', 'emoji', 'qa'):
+        q = q.filter(Message.message_type == type_filter)
     messages = q.all()
     detected = {r[0] for r in db.session.query(Message.detected_language).filter(
         Message.channel_id == channel_id,
