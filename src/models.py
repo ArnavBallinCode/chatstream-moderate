@@ -42,6 +42,7 @@ class Message(db.Model):
     eventyay_message_id      = db.Column(String(255), nullable=True)
     channel_id               = db.Column(String(64), db.ForeignKey('channels.id', ondelete='CASCADE'), nullable=False)
     screen_name              = db.Column(String(255), nullable=False)
+    wiki_username            = db.Column(String(255), nullable=True)   # Wikimedia global username when provided
     sender_id                = db.Column(String(255), nullable=True)
     centralauth_id           = db.Column(Integer, nullable=True)
     message                  = db.Column(Text, nullable=False)

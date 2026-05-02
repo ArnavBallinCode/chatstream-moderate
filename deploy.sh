@@ -8,6 +8,9 @@ echo "==> Pulling latest changes..."
 cd ~/chatstream-moderate
 git pull
 
+echo "==> Applying database migrations..."
+~/www/python/venv/bin/python -m flask db upgrade
+
 echo "==> Restarting web service..."
 cd ~
 toolforge webservice --backend=kubernetes python3.13 restart

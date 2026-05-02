@@ -147,9 +147,14 @@ def _process_message(channel: Channel, data: dict) -> None:
         screen_name = f'{channel.anonymous_label} #{channel.anonymous_counter}'
         db.session.flush()  # write the incremented counter before commit
     centralauth_id = int(data['centralauth_id']) if data.get('centralauth_id') else None
-    message_text = (data.get('message') or '').strip()
-    message_type = data.get('message_type', 'text')
-    eventyay_id  = data.get('message_id')
+    wiki_username  = (data.get('centralauth_username') or '').strip() or None
+    message_text   = (data.get('message') or '').strip()
+    message_type   = data.get('message_type', 'text')
+    # For emoji reactions the body is empty; the emoji symbol lives in meta.reaction
+    if message_type == 'emoji' and not message_text:
+        message_text = (data.get('meta') or {}).get('reaction', '') or ''
+    raw_id       = data.get('message_id')
+    eventyay_id  = str(raw_id) if raw_id is not None else None
 
     # Emoji "remove" reactions are audience engagement signals, not content to moderate
     if message_type == 'emoji' and (data.get('meta') or {}).get('action') == 'remove':
@@ -188,6 +193,7 @@ def _process_message(channel: Channel, data: dict) -> None:
         eventyay_message_id=eventyay_id,
         channel_id=channel.id,
         screen_name=screen_name,
+        wiki_username=wiki_username,
         sender_id=sender_id,
         centralauth_id=centralauth_id,
         message=message_text,
