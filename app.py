@@ -14,8 +14,6 @@ import requests
 from flask import Flask, redirect, render_template, request, session, url_for
 from flask_migrate import Migrate
 from flask_session import Session
-from sqlalchemy import text
-
 from src.models import db
 
 TOOL_NAME = "chatstream-moderate"
@@ -68,6 +66,9 @@ def create_app(test_config: dict | None = None) -> Flask:
 
     if not app.debug:
         app.config['SESSION_COOKIE_SECURE'] = True
+        if not _read_secret('secret-key'):
+            import warnings
+            warnings.warn('SECRET_KEY not set — using ephemeral random key; all sessions will be invalidated on restart', stacklevel=2)
 
     db.init_app(app)
     Migrate(app, db)
@@ -160,14 +161,6 @@ def create_app(test_config: dict | None = None) -> Flask:
         username       = profile.get('username')
         if not centralauth_id or not username:
             return 'OAuth profile missing required fields', 500
-
-        old_sid = getattr(session, 'sid', None)
-        if old_sid:
-            try:
-                db.session.execute(text('DELETE FROM sessions WHERE session_id = :sid'), {'sid': old_sid})
-                db.session.commit()
-            except Exception:
-                db.session.rollback()
 
         session.clear()
         session['centralauth_id'] = int(centralauth_id)

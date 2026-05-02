@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from flask import Blueprint, request, jsonify, render_template, abort
 from sqlalchemy import func
 from src.models import db, Channel, Message, Blacklist, BlockedPattern, ModerationLog, Whitelist
@@ -29,13 +29,13 @@ def _log(msg: Message, decision: str) -> None:
         message_text             = msg.message,
         message_type             = msg.message_type,
         arrived_at               = msg.arrived_at,
-        decided_at               = datetime.utcnow(),
+        decided_at               = datetime.now(timezone.utc),
     ))
 
 
 def _set_status(channel_id: str, msg_id: int, new_status: str):
     verify_csrf()
-    msg = Message.query.filter_by(id=msg_id, channel_id=channel_id).first_or_404()
+    msg = Message.query.filter_by(id=msg_id, channel_id=channel_id).with_for_update().first_or_404()
 
     new_rank = DECISION_RANK.get(new_status, 0)
     cur_rank = DECISION_RANK.get(msg.status, 0)
@@ -46,7 +46,7 @@ def _set_status(channel_id: str, msg_id: int, new_status: str):
 
     _log(msg, new_status)
     msg.status                    = new_status
-    msg.processed_at              = datetime.utcnow()
+    msg.processed_at              = datetime.now(timezone.utc)
     msg.processed_by_centralauth_id = current_centralauth_id()
     db.session.commit()
     return jsonify({'ok': True})
@@ -162,7 +162,7 @@ def highlight(channel_id: str, msg_id: int):
 def reject_similar(channel_id: str, msg_id: int):
     verify_csrf()
     msg = Message.query.filter_by(id=msg_id, channel_id=channel_id).first_or_404()
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     uid = current_centralauth_id()
     rejected = 0
     for m in Message.query.filter_by(channel_id=channel_id, status='queued').all():
@@ -199,7 +199,7 @@ def block_user(channel_id: str):
             added_by_centralauth_id=current_centralauth_id(),
             added_by_wiki_username=current_wiki_username() or '',
         ))
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         uid = current_centralauth_id()
         # Reject all queued messages from this sender (match by sender_id OR screen_name)
         for m in Message.query.filter_by(channel_id=channel_id, status='queued').all():
@@ -235,7 +235,7 @@ def whitelist_user(channel_id: str):
             added_by_centralauth_id=current_centralauth_id(),
             added_by_wiki_username=current_wiki_username() or '',
         ))
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         uid = current_centralauth_id()
         # Auto-approve any queued messages from this sender
         for m in Message.query.filter_by(channel_id=channel_id, status='queued').all():
@@ -261,7 +261,7 @@ def block_similar(channel_id: str):
         original_message_id=msg.id,
         added_by_centralauth_id=current_centralauth_id(),
     ))
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     uid = current_centralauth_id()
     rejected = 0
     for m in Message.query.filter_by(channel_id=channel_id, status='queued').all():

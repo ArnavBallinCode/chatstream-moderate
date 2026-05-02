@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import String, Text, Boolean, Integer, DateTime, Enum as SAEnum, UniqueConstraint, Index
 
@@ -21,7 +21,7 @@ class Channel(db.Model):
     emoji_auto_approve        = db.Column(Boolean, nullable=False, default=True)
     anonymous_label           = db.Column(String(64), nullable=False, default='Anonymous')
     anonymous_counter         = db.Column(Integer, nullable=False, default=0)
-    created_at                = db.Column(DateTime, nullable=False, default=datetime.utcnow)
+    created_at                = db.Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
     archived_at               = db.Column(DateTime, nullable=True)
 
 
@@ -32,7 +32,7 @@ class ChannelMember(db.Model):
     centralauth_id  = db.Column(Integer, nullable=False)
     wiki_username   = db.Column(String(255), nullable=False)
     role            = db.Column(SAEnum('admin', 'moderator'), nullable=False)
-    added_at        = db.Column(DateTime, nullable=False, default=datetime.utcnow)
+    added_at        = db.Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
     __table_args__  = (UniqueConstraint('channel_id', 'centralauth_id', name='uq_channel_member'),)
 
 
@@ -51,7 +51,7 @@ class Message(db.Model):
     user_language            = db.Column(String(10), nullable=True)
     detected_language        = db.Column(String(10), nullable=True)
     status                   = db.Column(SAEnum('queued', 'approved', 'highlighted', 'rejected'), nullable=False, default='queued')
-    arrived_at               = db.Column(DateTime, nullable=False, default=datetime.utcnow)
+    arrived_at               = db.Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
     processed_at             = db.Column(DateTime, nullable=True)
     processed_by_centralauth_id = db.Column(Integer, nullable=True)
     __table_args__ = (
@@ -70,7 +70,7 @@ class Blacklist(db.Model):
     centralauth_id        = db.Column(Integer, nullable=True)
     added_by_centralauth_id  = db.Column(Integer, nullable=False)
     added_by_wiki_username   = db.Column(String(255), nullable=False)
-    added_at              = db.Column(DateTime, nullable=False, default=datetime.utcnow)
+    added_at              = db.Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
     __table_args__        = (Index('ix_blacklist_sender', 'channel_id', 'sender_id', unique=True),)
     # NULLs are allowed multiple times in UNIQUE indexes (SQLite + MySQL), so
     # entries without a sender_id are deduplicated at the application level.
@@ -86,7 +86,7 @@ class Whitelist(db.Model):
     centralauth_id        = db.Column(Integer, nullable=True)
     added_by_centralauth_id  = db.Column(Integer, nullable=False)
     added_by_wiki_username   = db.Column(String(255), nullable=False)
-    added_at              = db.Column(DateTime, nullable=False, default=datetime.utcnow)
+    added_at              = db.Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
     __table_args__        = (Index('ix_whitelist_sender', 'channel_id', 'sender_id', unique=True),)
 
 
@@ -98,7 +98,7 @@ class GlobalBlacklist(db.Model):
     centralauth_id        = db.Column(Integer, nullable=True)
     added_by_centralauth_id  = db.Column(Integer, nullable=False)
     added_by_wiki_username   = db.Column(String(255), nullable=False)
-    added_at              = db.Column(DateTime, nullable=False, default=datetime.utcnow)
+    added_at              = db.Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
 
 
 class BlockedPattern(db.Model):
@@ -108,7 +108,7 @@ class BlockedPattern(db.Model):
     pattern_text          = db.Column(Text, nullable=False)
     original_message_id   = db.Column(Integer, db.ForeignKey('messages.id', ondelete='SET NULL'), nullable=True)
     added_by_centralauth_id = db.Column(Integer, nullable=False)
-    added_at              = db.Column(DateTime, nullable=False, default=datetime.utcnow)
+    added_at              = db.Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
 
 
 class ModerationLog(db.Model):
@@ -134,5 +134,8 @@ class ModerationLog(db.Model):
     message_text             = db.Column(Text, nullable=False, default='')
     message_type             = db.Column(String(16), nullable=False, default='text')
     arrived_at               = db.Column(DateTime, nullable=True)   # when message entered queue
-    decided_at               = db.Column(DateTime, nullable=False, default=datetime.utcnow)
-    __table_args__           = (Index('ix_modlog_channel_decided', 'channel_id', 'decided_at'),)
+    decided_at               = db.Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+    __table_args__           = (
+        Index('ix_modlog_channel_decided', 'channel_id', 'decided_at'),
+        Index('ix_modlog_channel_decision', 'channel_id', 'decision'),
+    )

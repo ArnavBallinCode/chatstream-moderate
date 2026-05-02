@@ -45,7 +45,7 @@ def webhook_receive(channel_id: str):
             if abs((datetime.now(timezone.utc) - ts).total_seconds()) > 300:
                 return jsonify({'ok': False, 'error': 'timestamp too old'}), 400
         except ValueError:
-            pass
+            abort(400)
     _process_message(channel, data)
     return jsonify({'ok': True})
 
@@ -170,7 +170,7 @@ def _process_message(channel: Channel, data: dict) -> None:
     if _is_whitelisted(channel, screen_name, sender_id, centralauth_id):
         status = 'approved'
     elif message_type == 'emoji' and channel.emoji_auto_approve:
-        cutoff = datetime.utcnow() - timedelta(seconds=10)
+        cutoff = datetime.now(timezone.utc) - timedelta(seconds=10)
         if Message.query.filter(
             Message.channel_id == channel.id,
             Message.message == message_text,
@@ -197,8 +197,8 @@ def _process_message(channel: Channel, data: dict) -> None:
         user_language=data.get('user_language'),
         detected_language=detected_language,
         status=status,
-        arrived_at=datetime.utcnow(),
-        processed_at=datetime.utcnow() if status == 'approved' else None,
+        arrived_at=datetime.now(timezone.utc),
+        processed_at=datetime.now(timezone.utc) if status == 'approved' else None,
     )
     db.session.add(msg)
     db.session.commit()
