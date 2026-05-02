@@ -118,7 +118,7 @@ def create_app(test_config: dict | None = None) -> Flask:
             'response_type':         'code',
             'client_id':             app.config['OAUTH_CLIENT_ID'],
             'redirect_uri':          app.config['OAUTH_REDIRECT_URI'],
-            'scope':                 'openid',
+            'scope':                 'basic',
             'state':                 state,
             'code_challenge':        challenge,
             'code_challenge_method': 'S256',
