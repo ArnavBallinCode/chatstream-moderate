@@ -9,7 +9,7 @@ cd ~/chatstream-moderate
 git pull
 
 echo "==> Syncing dependencies..."
-~/www/python/venv/bin/pip install -e ~/chatstream-moderate
+~/www/python/venv/bin/python3 -m pip install -e ~/chatstream-moderate
 
 echo "==> Restarting web service..."
 cd ~
