@@ -154,9 +154,10 @@ New tables are created automatically. Schema changes that alter existing tables 
 - New cards prepend (newest at top); removed cards slide out with CSS transition
 - `selectedId` — the keyboard-armed card; keys 1–6 fire actions
   - 1 highlight · 2 approve · 3 reject · 4 reject++ · 5 ban · 6 allow (whitelist)
-- `typeFilter` — 'all' | 'text' | 'emoji'; type filter bar in toolbar switches this and re-polls
+- `typeFilter` — 'all' | 'text' | 'emoji'; type filter bar in channel bar switches this and re-polls
 - `autoSelectAtPercentile()` — runs after each poll; selects card at percentile position when nothing is selected
-- Scroll compensation: `selCard.getBoundingClientRect().top` captured before DOM mutations, `window.scrollBy` after
+- `centerSelected()` — always-instant scroll so the selected card is vertically centred in the space below the channel bar; called after every DOM mutation and on selection change. No smooth scroll — it caused jumpy behavior when polls interrupted in-flight animations.
+- Focus percentile persisted in `localStorage` per channel (`focus:<channel_id>`); random initial value so moderators spread across the queue
 
 ---
 
@@ -245,3 +246,14 @@ With `FLASK_DEBUG=1`:
 GET /dev-login?username=YourWikimediaName
 ```
 Sets session directly. Username must be in `SUPERADMIN_USERS` for superadmin access.
+
+## Integration tests
+
+Run against an in-memory SQLite database — no server or OAuth required:
+
+```bash
+.venv/bin/python tests/test_webhook.py    # 20 tests: HMAC, replay protection, blacklist/whitelist, dedup
+.venv/bin/python tests/test_multiuser.py  # 16 tests: two-moderator DECISION_RANK scenarios
+```
+
+`verify_csrf()` accepts the `X-CSRF-Token` request header as well as the `csrf_token` form field — use the header in API test calls to avoid form-encoding overhead.

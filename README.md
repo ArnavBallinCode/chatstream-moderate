@@ -69,6 +69,17 @@ SUPERADMIN_USERS: list[str] = ["YourWikimediaName"]
 2. Visit `/admin/` → activate the simulation channel
 3. Open the simulation channel's queue — a floating panel lets you start/stop a message stream at up to 240 msg/min
 
+### Running the tests
+
+Integration tests use Flask's test client and an in-memory SQLite database — no running server needed:
+
+```bash
+.venv/bin/python tests/test_webhook.py
+.venv/bin/python tests/test_multiuser.py
+```
+
+See `tests/README.md` for what each suite covers.
+
 ### Database
 
 SQLite is used automatically for local dev (`instance/dev.db`). No setup needed.
@@ -254,8 +265,13 @@ chatstream-moderate/
     queue.html        — Moderation queue (JSON polling, keyboard shortcuts)
     queue/log.html    — Moderation decision log
     admin/            — Channel settings, blacklist, whitelist, simulation
-  static/css/
-    app.css           — Light wiki-polis theme
+  static/
+    css/app.css       — Light wiki-polis theme
+    js/user-picker.js — Wikimedia username autocomplete (meta.wikimedia.org API)
+  tests/
+    test_webhook.py   — 20 webhook intake integration tests
+    test_multiuser.py — 16 multi-moderator decision tests
+    README.md         — Test suite documentation
 ```
 
 ---
