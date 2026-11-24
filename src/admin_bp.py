@@ -8,6 +8,7 @@ from sqlalchemy import or_
 from sqlalchemy.exc import IntegrityError
 from flask import Blueprint, current_app, abort, request, render_template, redirect, url_for, flash, jsonify
 from src.models import db, Channel, ChannelMember, Blacklist, GlobalBlacklist, Whitelist
+from src.webhook import eventyay_status_rows
 from src.auth import superadmin_required, channel_role_required, verify_csrf, current_centralauth_id, current_wiki_username
 from src.utils import generate_token
 
@@ -72,10 +73,16 @@ def channel_edit_post(channel_id: str):
     ch.name        = request.form.get('name', ch.name).strip()
     ch.description = request.form.get('description', '').strip() or None
     ch.is_active   = 'is_active' in request.form
-    ch.is_public   = 'is_public' in request.form
+    # is_public is owned by the Moderation form (channel_settings_post); this
+    # form has no such field, so setting it here would make every save private.
     ch.custom_css  = request.form.get('custom_css', '').strip() or None
+    # Cut-off: a new secret makes every sender holding the old one get 403.
+    rotated = 'rotate_webhook_secret' in request.form
+    if rotated:
+        ch.webhook_hmac_secret = generate_token()
     db.session.commit()
-    flash('Channel updated.')
+    flash('Channel updated. New webhook secret generated: paste it into Eventyay to reconnect.'
+          if rotated else 'Channel updated.')
     return redirect(url_for('admin.channel_edit', channel_id=channel_id))
 
 
@@ -224,7 +231,8 @@ def channel_settings(channel_id: str):
     members_by_caid = {str(m.centralauth_id): m.role for m in admins + moderators}
     return render_template('admin/channel_settings.html', channel=channel,
                            admins=admins, moderators=moderators,
-                           superadmins=superadmins, members_by_caid=members_by_caid)
+                           superadmins=superadmins, members_by_caid=members_by_caid,
+                           eventyay_status=eventyay_status_rows(channel.eventyay_status))
 
 
 @admin_bp.post('/channel/<channel_id>/settings')
